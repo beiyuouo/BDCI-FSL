@@ -146,5 +146,10 @@ def train(cfg_path: str):
         if f1 > best_f1:
             best_f1 = f1
             logger.info(f"best f1 score {best_f1:.4f} saving model")
-            model.save_pretrained(cfg.model_path)
-            tokenizer.save_pretrained(cfg.model_path)
+            model.save_pretrained(cfg.model_path / "best_model")
+            tokenizer.save_pretrained(cfg.model_path / "best_model")
+
+        if (epoch + 1) % cfg.chpt_freq == 0:
+            logger.info(f"saving model at epoch {epoch + 1}")
+            model.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
+            tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")

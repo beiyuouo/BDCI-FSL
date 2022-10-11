@@ -49,7 +49,10 @@ def init_seed(seed: int = 3407):
 
 
 def init_path(cfg):
-    cfg["run_path"] = Path(cfg["run_path"])
+    cfg["run_path"] = (
+        Path(cfg["run_path"])
+        / f"{cfg['exp_name']}_ep{cfg['epochs']}_bs{cfg['batch_size']}"
+    )
     cfg["run_path"].mkdir(parents=True, exist_ok=True)
     cfg["log_path"] = cfg["run_path"] / "logs"
     cfg["log_path"].mkdir(parents=True, exist_ok=True)
