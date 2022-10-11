@@ -10,7 +10,7 @@ from core.model import load_model, load_tokenizer
 from core.dataset import FSDataset
 
 
-def test(cfg_path: str, model_path: str):
+def testA(cfg_path: str, model_path: str):
     cfg = init(cfg_path)
     logger.info(cfg)
 
