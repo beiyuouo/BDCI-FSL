@@ -22,7 +22,7 @@ class FSDataset(Dataset):
         if not self.is_test:
             label = int(self.label[item])
         else:
-            label = None
+            label = 0
 
         title = self.title[item]
         assignee = self.assignee[item]
@@ -35,7 +35,5 @@ class FSDataset(Dataset):
             "input_ids": torch.tensor(inputs["input_ids"], dtype=torch.long),
             "attention_mask": torch.tensor(inputs["attention_mask"], dtype=torch.long),
             "token_type_ids": torch.tensor(inputs["token_type_ids"], dtype=torch.long),
-            "label": torch.tensor(label, dtype=torch.long)
-            if label is not None
-            else None,
+            "label": torch.tensor(label, dtype=torch.long),
         }

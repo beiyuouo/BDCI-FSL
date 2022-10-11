@@ -73,3 +73,13 @@ def get_scheduler(cfg, optimizer, num_train_steps):
             num_cycles=cfg.num_cycles,
         )
     return scheduler
+
+
+def load_model(model_path):
+    model = AutoModelForSequenceClassification.from_pretrained(model_path)
+    return model
+
+
+def load_tokenizer(tokenizer_path):
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    return tokenizer

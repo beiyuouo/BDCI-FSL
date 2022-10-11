@@ -13,6 +13,6 @@ class Scaffold(object):
     def test(
         self,
         cfg_path: str = "config/hyps.yaml",
-        model_path: str = "runs/weigths/best.pt",
+        model_path: str = None,
     ):
         test(cfg_path, model_path)

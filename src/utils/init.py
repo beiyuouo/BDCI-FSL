@@ -55,6 +55,8 @@ def init_path(cfg):
     cfg["log_path"].mkdir(parents=True, exist_ok=True)
     cfg["model_path"] = cfg["run_path"] / "weights"
     cfg["model_path"].mkdir(parents=True, exist_ok=True)
+    cfg["export_path"] = Path(cfg["export_path"])
+    cfg["export_path"].mkdir(parents=True, exist_ok=True)
 
 
 def init(cfg_path: str):
