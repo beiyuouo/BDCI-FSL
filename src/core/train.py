@@ -86,7 +86,7 @@ def valid_epoch(model, data_loader, device, cfg):
     preds = np.array(preds)
     labels = np.array(labels)
     f1 = f1_score(labels, preds, average="macro")
-    logger.info(f"f1 score {f1:.4f}")
+    # logger.info(f"f1 score {f1:.4f}")
 
     return f1
 
