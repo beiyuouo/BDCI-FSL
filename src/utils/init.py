@@ -25,8 +25,8 @@ def init_log(log_path: str = None):
 
     if log_path is not None:
         logger.add(
-            sink=log_path,
-            colorize=True,
+            sink=log_path / "log.txt",
+            colorize=False,
             level="DEBUG",
             format=event_logger_format,
             diagnose=False,
@@ -59,12 +59,12 @@ def init_path(cfg):
     cfg["export_path"].mkdir(parents=True, exist_ok=True)
 
 
-def init(cfg_path: str):
+def init(cfg_path: str, call_from: str = None):
     cfg = ez.Config().load(cfg_path)
 
     init_seed(cfg.seed)
     init_path(cfg)
-    init_log()
+    init_log(cfg.log_path)
 
     # save to run_path
     yaml.dump(cfg, open(cfg["run_path"] / "hyps.yaml", "w"))
