@@ -1,0 +1,34 @@
+# training hyperparameters
+encoder_lr: !!float 20e-6
+decoder_lr: !!float 20e-6
+eps: !!float 1e-6
+betas: [0.9, 0.999]
+weight_decay: 0.0
+num_cycles: 0.5
+num_warmup_steps: 0
+max_input_length: 1024
+max_grad_norm: 500
+
+scheduler: "cosine"
+batch_scheduler: True
+
+epochs: 5
+batch_size: 16
+
+# model config
+model_name: "hfl/chinese-roberta-wwm-ext"
+num_labels: 36
+
+# data config
+data_path: "./../data"
+num_workers: 4
+
+# path settings
+run_path: "./runs/exp"
+
+# misc
+seed: 3407
+chpt_freq: 5
+log_freq: 20
+# device
+device: "cuda"
