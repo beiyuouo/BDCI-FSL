@@ -10,12 +10,12 @@ from core.model import load_model, load_tokenizer
 from core.dataset import FSDataset
 
 
-def testA(cfg_path: str, model_path: str):
+def testA(cfg_path: str, model_path: str, use_best: bool = True):
     cfg = init(cfg_path)
     logger.info(cfg)
 
     if model_path is None:
-        model_path = cfg.model_path
+        model_path = cfg.model_path / "best" if use_best else cfg.model_path / "final"
 
     model = load_model(model_path)
     logger.info(model)
@@ -34,6 +34,7 @@ def testA(cfg_path: str, model_path: str):
     )
 
     model.to(cfg.device)
+    model.eval()
 
     preds = []
     for step, batch in enumerate(test_dl):
