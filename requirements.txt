@@ -1,0 +1,5 @@
+transformers==4.22.1
+fire
+loguru
+sklearn
+pandas
