@@ -24,9 +24,9 @@ data_path: "./../data"
 num_workers: 4
 
 # path settings
-run_path: "./runs"
+run_path: "./../runs"
 exp_name: "exp"
-export_path: "./export"
+export_path: "./../export"
 
 # misc
 seed: 3407
