@@ -32,6 +32,8 @@ export_path: "./../export"
 seed: 3407
 chpt_freq: 5
 log_freq: 20
+use_best: False
+from_scratch: False
 
 # device
 device: "cuda"

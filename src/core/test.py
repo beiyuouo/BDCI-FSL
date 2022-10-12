@@ -10,12 +10,14 @@ from core.model import load_model, load_tokenizer
 from core.dataset import FSDataset
 
 
-def testA(cfg_path: str, model_path: str, use_best: bool = True):
+def testA(cfg_path: str, model_path: str):
     cfg = init(cfg_path)
     logger.info(cfg)
 
     if model_path is None:
-        model_path = cfg.model_path / "best" if use_best else cfg.model_path / "final"
+        model_path = (
+            cfg.model_path / "best" if cfg.use_best else cfg.model_path / "final"
+        )
 
     model = load_model(model_path)
     logger.info(model)
@@ -59,4 +61,9 @@ def testA(cfg_path: str, model_path: str, use_best: bool = True):
     test_df["label"] = preds
 
     test_df_export = test_df[["id", "label"]]
-    test_df_export.to_csv(os.path.join(cfg.export_path, "test_submit.csv"), index=False)
+    test_df_export.to_csv(
+        os.path.join(
+            cfg.export_path, f"test_submit_A_ep{cfg.epochs}_bs{cfg.batch_size}.csv"
+        ),
+        index=False,
+    )
