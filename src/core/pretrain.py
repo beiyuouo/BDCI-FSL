@@ -20,8 +20,11 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
     model.train()
     training_loss = 0.0
     for step, batch in enumerate(data_loader):
-        input_ids = batch["inputs"].squeeze(0).to(device)
-        labels = batch["labels"].squeeze(0).to(device)
+        input_ids = batch["inputs"].squeeze(1).to(device)
+        labels = batch["labels"].squeeze(1).to(device)
+
+        # logger.info(f"input_ids: {input_ids.shape}")
+        # logger.info(f"labels: {labels.shape}")
 
         outputs = model(input_ids=input_ids, labels=labels)
         loss = outputs.loss
@@ -34,7 +37,7 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
 
         if (step + 1) % cfg.log_freq == 0 or step == len(data_loader) - 1:
             logger.info(
-                f"epoch {epoch + 1} / {cfg.epochs}, step {step + 1} / {len(data_loader)}, loss {loss.item():.4f}"
+                f"epoch {epoch + 1} / {cfg.pretrain.epochs}, step {step + 1} / {len(data_loader)}, loss {loss.item():.4f}"
             )
 
 
@@ -63,7 +66,7 @@ def pretrain(cfg_path: str = "config/hyps.yaml", model_path: str = None):
 
     train_dl = DataLoader(
         train_ds,
-        batch_size=1,
+        batch_size=cfg.batch_size,
         shuffle=True,
         num_workers=cfg.num_workers,
     )
@@ -71,20 +74,21 @@ def pretrain(cfg_path: str = "config/hyps.yaml", model_path: str = None):
     model.to(cfg.device)
 
     optimizer = get_optimizer(model, cfg)
-    num_train_steps = int(len(train_ds) / cfg.batch_size * cfg.epochs)
+    num_train_steps = int(len(train_ds) / cfg.batch_size * cfg.pretrain.epochs)
     scheduler = get_scheduler(cfg, optimizer, num_train_steps)
 
     for epoch in range(cfg.pretrain.epochs):
-        logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
+        logger.info(f"epoch {epoch + 1} / {cfg.pretrain.epochs}")
         start_time = time.time()
 
         train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
         logger.info(
-            f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
+            f"train epoch {epoch + 1} / {cfg.pretrain.epochs} done in {time.time() - start_time:.2f} seconds"
         )
 
+        if (epoch + 1) % cfg.chpt_freq == 0:
+            model.save_pretrained(cfg.model_path / "pretrained")
+            tokenizer.save_pretrained(cfg.model_path / "pretrained")
+
     model.save_pretrained(cfg.model_path / "pretrained")
-
-
-if __name__ == "__main__":
-    pretrain()
+    tokenizer.save_pretrained(cfg.model_path / "pretrained")

@@ -12,13 +12,13 @@ max_grad_norm: 500
 scheduler: "cosine"
 batch_scheduler: True
 
-epochs: 5
-batch_size: 16
+epochs: 1
+batch_size: 8
 
 # pretrain config
 pretrain:
-  epochs: 100
-  batch_size: 4
+  epochs: 1
+  batch_size: 8
   lr: !!float 1e-5
   weight_decay: 0.0
 
@@ -44,7 +44,7 @@ export_path: "./../export"
 
 # misc
 seed: 3407
-chpt_freq: 5
+chpt_freq: 10
 log_freq: 20
 use_best: False
 from_scratch: False

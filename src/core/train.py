@@ -114,7 +114,7 @@ def train(cfg_path: str, model_path: str = None):
     if cfg.from_scratch:
         model = get_model(cfg.model_name, cfg.num_labels)
     else:
-        model = load_model(model_path)
+        model = load_model(model_path, cfg.num_labels)
 
     tokenizer = get_tokenizer(cfg.model_name)
 

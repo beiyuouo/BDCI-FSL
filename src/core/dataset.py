@@ -18,8 +18,6 @@ class FSDataset(Dataset):
         self.cfg = cfg
 
     def __len__(self):
-        if self.mlm:
-            return len(self.title) // self.cfg.batch_size
         return len(self.title)
 
     def __get_input_text__(self, item):
@@ -34,7 +32,7 @@ class FSDataset(Dataset):
         input_text = self.__get_input_text__(item)
 
         inputs = self.tokenizer(
-            input_text, truncation=True, max_length=1024, padding="max_length"
+            input_text, truncation=True, max_length=512, padding="max_length"
         )
         if not self.is_test:
             label = int(self.label[item])
@@ -49,19 +47,14 @@ class FSDataset(Dataset):
         }
 
     def __get_mlm_item__(self, item):
-        # get batch data with batch size=cfg.pretrain.batch_size
-        start_idx, end_idx = (
-            item * self.cfg.pretrain.batch_size,
-            min((item + 1) * self.cfg.pretrain.batch_size, len(self.title)),
-        )
-        batch_text = [self.__get_input_text__(i) for i in range(start_idx, end_idx)]
+        input_text = self.__get_input_text__(item)
 
         # tokenize batch data
         feats = self.tokenizer(
-            batch_text,
+            input_text,
             max_length=512,
             truncation=True,
-            padding=True,
+            padding="max_length",
             return_tensors="pt",
         )
 

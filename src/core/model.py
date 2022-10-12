@@ -79,8 +79,10 @@ def get_scheduler(cfg, optimizer, num_train_steps):
     return scheduler
 
 
-def load_model(model_path):
-    model = AutoModelForSequenceClassification.from_pretrained(model_path)
+def load_model(model_path, num_labels: int = 36):
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_path, num_labels=num_labels
+    )
     return model
 
 

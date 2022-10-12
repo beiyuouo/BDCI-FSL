@@ -9,24 +9,24 @@ class Scaffold(object):
 
     def pretrain(
         self,
-        cfg_path: str = "config/hyps.yaml",
+        cfg_path: str = "./../config/hyps.yaml",
         model_path: str = None,
     ):
         pretrain(cfg_path, model_path)
 
-    def train(self, cfg_path: str = "config/hyps.yaml", model_path: str = None):
+    def train(self, cfg_path: str = "./../config/hyps.yaml", model_path: str = None):
         train(cfg_path, model_path)
 
     def testA(
         self,
-        cfg_path: str = "config/hyps.yaml",
+        cfg_path: str = "./../config/hyps.yaml",
         model_path: str = None,
     ):
         testA(cfg_path, model_path)
 
     def test(
         self,
-        cfg_path: str = "config/hyps.yaml",
+        cfg_path: str = "./../config/hyps.yaml",
         model_path: str = None,
     ):
         self.testA(cfg_path, model_path)
