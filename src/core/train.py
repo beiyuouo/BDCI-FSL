@@ -424,14 +424,14 @@ def train_ssl(cfg_path: str, model_path: str = None):
     model.to(cfg.device)
 
     optimizer = get_optimizer(model, cfg)
-    num_train_steps = int(len(labeled_ds) / cfg.batch_size * cfg.epochs)
+    num_train_steps = int(len(unlabeled_ds) / cfg.batch_size * cfg.epochs)
     scheduler = get_scheduler(cfg, optimizer, num_train_steps)
 
     label_iter = iter(labeled_dl)
     unlabel_iter = iter(unlabeled_dl)
 
-    total_steps = int(len(labeled_ds) / cfg.batch_size * cfg.epochs)
-    epoch_step = int(len(labeled_ds) / cfg.batch_size)
+    total_steps = int(len(unlabeled_ds) / cfg.batch_size * cfg.epochs)
+    epoch_step = int(len(unlabeled_ds) / cfg.batch_size)
     # total_steps = epoch_step
     epoch = 0
 
@@ -463,32 +463,32 @@ def train_ssl(cfg_path: str, model_path: str = None):
         unlabeled_ids = unlabeled_batch["input_ids"].to(cfg.device)
         unlabeled_mask = unlabeled_batch["attention_mask"].to(cfg.device)
 
+        model.eval()
+        fake_labels = (
+            model(unlabeled_ids, attention_mask=unlabeled_mask)
+            .logits.argmax(dim=1)
+            .detach()
+        )
+        # logger.info(f"fake labels {fake_labels}")
+        model.train()
+
         optimizer.zero_grad()
+        model.zero_grad()
+
+        unlabeled_ouputs = model(
+            unlabeled_ids, attention_mask=unlabeled_mask, labels=fake_labels
+        )
+
         labeled_ouputs = model(
             labeled_ids, attention_mask=labeled_mask, labels=labeled_labels
         )
-        unlabeled_ouputs = model(unlabeled_ids, attention_mask=unlabeled_mask)
-
-        fake_labels = torch.argmax(unlabeled_ouputs.logits, dim=1).detach()
 
         # sharpening
         # fake_labels = torch.softmax(unlabeled_ouputs.logits / cfg.ssl.T, dim=1).argmax(
         #     dim=1
         # )
 
-        fake_labels = fake_labels.float()
-        # fake_labels to one-hot
-        fake_labels = F.one_hot(fake_labels.to(torch.int64), cfg.num_labels).float()
-
-        # logger.info(f"labeled loss {labeled_ouputs.loss.item():.4f}")
-        # logger.info(f"unlabeled fake labels {fake_labels}")
-        # logger.info(
-        #     f"unlabeled loss {F.mse_loss(unlabeled_ouputs.logits.float(), fake_labels)}"
-        # )
-
-        loss = labeled_ouputs.loss + cfg.ssl.lambda_u * F.mse_loss(
-            unlabeled_ouputs.logits.float(), fake_labels
-        )
+        loss = labeled_ouputs.loss + cfg.ssl.lambda_u * unlabeled_ouputs.loss
 
         loss.backward()
         optimizer.step()
@@ -498,7 +498,7 @@ def train_ssl(cfg_path: str, model_path: str = None):
 
         if (step + 1) % cfg.log_freq == 0:
             logger.info(
-                f"train step {step + 1} / {total_steps} done in {time.time() - start_time:.2f} seconds with loss {train_loss / ((step + 1) % epoch_step + 1):.4f}"
+                f"train step {step + 1} / {total_steps} done in {time.time() - start_time:.2f} seconds with loss {loss.item():.4f} labeled loss {labeled_ouputs.loss.item():.4f} unlabeled loss {unlabeled_ouputs.loss.item():.4f}"
             )
 
         if (step + 1) % epoch_step == 0:
@@ -506,7 +506,6 @@ def train_ssl(cfg_path: str, model_path: str = None):
             logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
             start_time = time.time()
             train_loss = 0.0
-            train_acc = 0.0
 
             model.eval()
 

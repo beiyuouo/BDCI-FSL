@@ -53,7 +53,7 @@ use_tta: False
 
 # ssl
 ssl:
-  lambda_u: 100
+  lambda_u: 1
   T: 0.5
   K: 2
   alpha: 0.75
