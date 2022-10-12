@@ -11,7 +11,13 @@ import ezkfg as ez
 from utils.init import init
 from utils.data import load_data
 from core.dataset import FSDataset
-from core.model import get_model, get_optimizer, get_scheduler, get_tokenizer
+from core.model import (
+    get_model,
+    get_optimizer,
+    get_scheduler,
+    get_tokenizer,
+    load_model,
+)
 
 
 def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
@@ -91,7 +97,7 @@ def valid_epoch(model, data_loader, device, cfg):
     return f1
 
 
-def train(cfg_path: str):
+def train(cfg_path: str, model_path: str = None):
     cfg = init(cfg_path)
     logger.info(cfg)
 
@@ -101,7 +107,15 @@ def train(cfg_path: str):
     train_data = data_df.sample(frac=0.9, random_state=cfg.seed)
     valid_data = data_df.drop(train_data.index).reset_index(drop=True)
 
-    model = get_model(cfg.model_name, cfg.num_labels)
+    model_path = (
+        Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
+    )
+
+    if cfg.from_scratch:
+        model = get_model(cfg.model_name, cfg.num_labels)
+    else:
+        model = load_model(model_path)
+
     tokenizer = get_tokenizer(cfg.model_name)
 
     train_dataset = FSDataset(train_data, tokenizer)

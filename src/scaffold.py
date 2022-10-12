@@ -1,13 +1,21 @@
 from core.train import train
 from core.test import testA
+from core.pretrain import pretrain
 
 
 class Scaffold(object):
     def __init__(self) -> None:
         pass
 
-    def train(self, cfg_path: str = "config/hyps.yaml"):
-        train(cfg_path)
+    def pretrain(
+        self,
+        cfg_path: str = "config/hyps.yaml",
+        model_path: str = None,
+    ):
+        pretrain(cfg_path, model_path)
+
+    def train(self, cfg_path: str = "config/hyps.yaml", model_path: str = None):
+        train(cfg_path, model_path)
 
     def testA(
         self,
@@ -22,3 +30,8 @@ class Scaffold(object):
         model_path: str = None,
     ):
         self.testA(cfg_path, model_path)
+
+    def rush(self):
+        self.pretrain()
+        self.train()
+        self.test()
