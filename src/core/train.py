@@ -152,14 +152,15 @@ def train(cfg_path: str, model_path: str = None):
         )
 
         start_time = time.time()
-        f1 = valid_epoch(model, valid_dl, cfg.device, cfg)
+        f1_train = valid_epoch(model, train_dl, cfg.device, cfg)
+        f1_val = valid_epoch(model, valid_dl, cfg.device, cfg)
         logger.info(
-            f"valid epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds f1 score {f1:.4f}"
+            f"valid epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds f1 train {f1_train:.4f} f1 val {f1_val:.4f}"
         )
 
-        if f1 > best_f1:
-            best_f1 = f1
-            logger.info(f"best f1 score {best_f1:.4f} saving model")
+        if f1_val > best_f1:
+            best_f1 = f1_val
+            logger.info(f"best fl val score {best_f1:.4f} saving model")
             model.save_pretrained(cfg.model_path / "best")
             tokenizer.save_pretrained(cfg.model_path / "best")
 
@@ -169,5 +170,66 @@ def train(cfg_path: str, model_path: str = None):
             tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
 
     logger.info(f"best f1 score {best_f1:.4f}")
+    model.save_pretrained(cfg.model_path / "final")
+    tokenizer.save_pretrained(cfg.model_path / "final")
+
+
+def train_full(cfg_path: str, model_path: str = None):
+    cfg = init(cfg_path)
+    logger.info(cfg)
+
+    data_df = load_data(cfg.data_path, split="train")
+    logger.info(data_df.head())
+
+    model_path = (
+        Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
+    )
+
+    if cfg.from_scratch:
+        model = get_model(cfg.model_name, cfg.num_labels)
+    else:
+        model = load_model(model_path, cfg.num_labels)
+
+    tokenizer = get_tokenizer(cfg.model_name)
+
+    train_dataset = FSDataset(data_df, tokenizer)
+
+    train_dl = DataLoader(
+        train_dataset,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=cfg.num_workers,
+    )
+
+    model.to(cfg.device)
+
+    optimizer = get_optimizer(model, cfg)
+    num_train_steps = int(len(train_dataset) / cfg.batch_size * cfg.epochs)
+    scheduler = get_scheduler(cfg, optimizer, num_train_steps)
+
+    best_f1 = 0
+
+    for epoch in range(cfg.epochs):
+        logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
+        start_time = time.time()
+
+        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
+        logger.info(
+            f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
+        )
+
+        f1_train = valid_epoch(model, train_dl, cfg.device, cfg)
+
+        if (epoch + 1) % cfg.chpt_freq == 0:
+            logger.info(f"saving model at epoch {epoch + 1}")
+            model.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
+            tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
+
+        if f1_train > best_f1:
+            best_f1 = f1_train
+            logger.info(f"best f1 score {best_f1:.4f} saving model")
+            model.save_pretrained(cfg.model_path / "best")
+            tokenizer.save_pretrained(cfg.model_path / "best")
+
     model.save_pretrained(cfg.model_path / "final")
     tokenizer.save_pretrained(cfg.model_path / "final")

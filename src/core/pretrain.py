@@ -40,6 +40,8 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
                 f"epoch {epoch + 1} / {cfg.pretrain.epochs}, step {step + 1} / {len(data_loader)}, loss {loss.item():.4f}"
             )
 
+    return training_loss / len(data_loader)
+
 
 def pretrain(cfg_path: str = "config/hyps.yaml", model_path: str = None):
     cfg = init(cfg_path)
@@ -81,9 +83,11 @@ def pretrain(cfg_path: str = "config/hyps.yaml", model_path: str = None):
         logger.info(f"epoch {epoch + 1} / {cfg.pretrain.epochs}")
         start_time = time.time()
 
-        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
+        training_loss = train_epoch(
+            epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg
+        )
         logger.info(
-            f"train epoch {epoch + 1} / {cfg.pretrain.epochs} done in {time.time() - start_time:.2f} seconds"
+            f"train epoch {epoch + 1} / {cfg.pretrain.epochs} done in {time.time() - start_time:.2f} seconds with loss {training_loss:.4f}"
         )
 
         if (epoch + 1) % cfg.chpt_freq == 0:

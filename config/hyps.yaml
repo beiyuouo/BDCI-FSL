@@ -48,6 +48,8 @@ chpt_freq: 10
 log_freq: 20
 use_best: False
 from_scratch: False
+with_augment: False
+use_tta: False
 
 # device
 device: "cuda"
