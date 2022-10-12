@@ -3,6 +3,8 @@ import time
 from pathlib import Path
 from loguru import logger
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 import numpy as np
@@ -27,13 +29,11 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
     for step, batch in enumerate(data_loader):
         label = batch["label"].to(device)
         mask = batch["attention_mask"].to(device)
-        token_type_ids = batch["token_type_ids"].to(device)
         input_ids = batch["input_ids"].to(device)
 
         outputs = model(
             input_ids=input_ids,
             attention_mask=mask,
-            token_type_ids=token_type_ids,
             labels=label,
         )
 
@@ -74,7 +74,6 @@ def valid_epoch(model, data_loader, device, cfg):
             outputs = model(
                 input_ids=input_ids,
                 attention_mask=mask,
-                token_type_ids=token_type_ids,
                 labels=label,
             )
 
@@ -230,6 +229,143 @@ def train_full(cfg_path: str, model_path: str = None):
             logger.info(f"best f1 score {best_f1:.4f} saving model")
             model.save_pretrained(cfg.model_path / "best")
             tokenizer.save_pretrained(cfg.model_path / "best")
+
+    model.save_pretrained(cfg.model_path / "final")
+    tokenizer.save_pretrained(cfg.model_path / "final")
+
+
+def train_ssl(cfg_path: str, model_path: str = None):
+    cfg = init(cfg_path)
+    logger.info(cfg)
+
+    labeled_df = load_data(cfg.data_path, split="train")
+    unlabeled_df = load_data(cfg.data_path, split="test")
+
+    model_path = (
+        Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
+    )
+
+    if cfg.from_scratch:
+        model = get_model(cfg.model_name, cfg.num_labels)
+    else:
+        model = load_model(model_path, cfg.num_labels)
+
+    tokenizer = get_tokenizer(cfg.model_name)
+
+    labeled_ds = FSDataset(labeled_df, tokenizer)
+    unlabeled_ds = FSDataset(unlabeled_df, tokenizer, is_test=True)
+
+    labeled_dl = DataLoader(
+        labeled_ds,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=cfg.num_workers,
+    )
+
+    unlabeled_dl = DataLoader(
+        unlabeled_ds,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=cfg.num_workers,
+    )
+
+    model.to(cfg.device)
+
+    optimizer = get_optimizer(model, cfg)
+    num_train_steps = int(len(labeled_ds) / cfg.batch_size * cfg.epochs)
+    scheduler = get_scheduler(cfg, optimizer, num_train_steps)
+
+    best_f1 = 0
+    label_iter = iter(labeled_dl)
+    unlabel_iter = iter(unlabeled_dl)
+
+    total_steps = int(len(labeled_ds) / cfg.batch_size * cfg.epochs)
+    epoch_step = int(len(labeled_ds) / cfg.batch_size)
+    epoch = 0
+
+    for step in range(total_steps):
+        logger.info(f"step {step + 1} / {total_steps}")
+        start_time = time.time()
+
+        train_loss = 0.0
+        train_acc = 0.0
+
+        model.train()
+
+        try:
+            labeled_batch = next(label_iter)
+        except StopIteration:
+            label_iter = iter(labeled_dl)
+            labeled_batch = next(label_iter)
+
+        try:
+            unlabeled_batch = next(unlabel_iter)
+        except StopIteration:
+            unlabel_iter = iter(unlabeled_dl)
+            unlabeled_batch = next(unlabel_iter)
+
+        labeled_ids = labeled_batch["input_ids"].to(cfg.device)
+        labeled_mask = labeled_batch["attention_mask"].to(cfg.device)
+        labeled_labels = labeled_batch["label"].to(cfg.device)
+
+        unlabeled_ids = unlabeled_batch["input_ids"].to(cfg.device)
+        unlabeled_mask = unlabeled_batch["attention_mask"].to(cfg.device)
+
+        optimizer.zero_grad()
+        labeled_ouputs = model(
+            labeled_ids, attention_mask=labeled_mask, labels=labeled_labels
+        )
+        unlabeled_ouputs = model(unlabeled_ids, attention_mask=unlabeled_mask)
+
+        # sharpening
+        fake_labels = torch.softmax(unlabeled_ouputs.logits / cfg.ssl.T, dim=1).argmax(
+            dim=1
+        )
+
+        # logger.info(f"labeled loss {labeled_ouputs.loss.item():.4f}")
+        # logger.info(f"unlabeled fake labels {fake_labels}")
+
+        fake_labels = fake_labels.unsqueeze(1).float()
+
+        loss = labeled_ouputs.loss + cfg.ssl.lambda_u * F.mse_loss(
+            unlabeled_ouputs.logits, fake_labels
+        )
+
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+        train_loss += loss.item()
+        train_acc += (
+            (labeled_ouputs.logits.argmax(dim=1) == labeled_labels).sum().item()
+        )
+
+        if (step + 1) % cfg.log_freq == 0:
+            logger.info(
+                f"train step {step + 1} / {total_steps} done in {time.time() - start_time:.2f} seconds with loss {train_loss / cfg.log_freq:.4f} and acc {train_acc / cfg.log_freq:.4f}"
+            )
+
+        if (step + 1) % epoch_step == 0:
+            epoch += 1
+            logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
+            start_time = time.time()
+            train_loss = 0.0
+            train_acc = 0.0
+
+            model.eval()
+
+            f1_train = valid_epoch(model, labeled_dl, cfg.device, cfg)
+
+            if (epoch + 1) % cfg.chpt_freq == 0:
+                logger.info(f"saving model at epoch {epoch + 1}")
+                model.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
+                tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
+
+            if f1_train > best_f1:
+                best_f1 = f1_train
+                logger.info(f"best f1 score {best_f1:.4f} saving model")
+                model.save_pretrained(cfg.model_path / "best")
+                tokenizer.save_pretrained(cfg.model_path / "best")
 
     model.save_pretrained(cfg.model_path / "final")
     tokenizer.save_pretrained(cfg.model_path / "final")
