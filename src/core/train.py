@@ -52,7 +52,7 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
         if scheduler is not None:
             scheduler.step()
 
-        if step % cfg.log_freq == 0 or step == len(data_loader) - 1:
+        if (step + 1) % cfg.log_freq == 0 or step == len(data_loader) - 1:
             logger.info(
                 f"epoch {epoch + 1} / {cfg.epochs} step {step + 1} / {len(data_loader)} loss {loss.item():.4f} loss avg {total_loss / (step + 1):.4f} grad norm {grad_norm:.4f}"
             )
@@ -84,7 +84,7 @@ def valid_epoch(model, data_loader, device, cfg):
         preds.extend(outputs.logits.argmax(dim=1).to("cpu").numpy())
         labels.extend(label.to("cpu").numpy())
 
-        if step % cfg.log_freq == 0 or step == len(data_loader) - 1:
+        if (step + 1) % cfg.log_freq == 0 or step == len(data_loader) - 1:
             logger.info(
                 f"step {step + 1} / {len(data_loader)} loss {loss.item():.4f} loss avg {total_loss / (step + 1):.4f}"
             )

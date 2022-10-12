@@ -15,6 +15,20 @@ batch_scheduler: True
 epochs: 5
 batch_size: 16
 
+# pretrain config
+pretrain:
+  epochs: 100
+  batch_size: 4
+  lr: !!float 1e-5
+  weight_decay: 0.0
+
+# mlm config
+mlm_probability: 0.15
+special_tokens_mask:
+prob_replace_mask: 0.8
+prob_replace_rand: 0.1
+prob_keep_ori: 0.1
+
 # model config
 model_name: "hfl/chinese-roberta-wwm-ext"
 num_labels: 36

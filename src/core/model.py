@@ -1,4 +1,8 @@
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    AutoModelForMaskedLM,
+)
 from transformers import (
     get_linear_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
@@ -83,3 +87,12 @@ def load_model(model_path):
 def load_tokenizer(tokenizer_path):
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     return tokenizer
+
+
+def get_maskedlm_model(model_name: str = "hfl/chinese-roberta-wwm-ext"):
+    return AutoModelForMaskedLM.from_pretrained(model_name)
+
+
+def load_maskedlm_model(model_path):
+    model = AutoModelForMaskedLM.from_pretrained(model_path)
+    return model

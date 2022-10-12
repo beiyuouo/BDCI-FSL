@@ -53,7 +53,7 @@ def testA(cfg_path: str, model_path: str):
 
         preds.extend(outputs.logits.argmax(dim=1).to("cpu").numpy())
 
-        if step % cfg.log_freq == 0:
+        if (step + 1) % cfg.log_freq == 0 or step == len(test_dl) - 1:
             logger.info(f"step: {step}/{len(test_dl)}")
 
     preds = np.array(preds)
