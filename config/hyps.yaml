@@ -46,7 +46,7 @@ export_path: "./../export"
 seed: 3407
 chpt_freq: 10
 log_freq: 20
-use_best: False
+use_best: True
 from_scratch: False
 with_augment: False
 use_tta: False
@@ -57,6 +57,9 @@ ssl:
   T: 0.5
   K: 2
   alpha: 0.75
+
+threshold: 0.8
+warmup_epochs: 10
 
 # device
 device: "cuda"

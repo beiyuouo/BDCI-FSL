@@ -1,7 +1,7 @@
-from cgi import test
-from core.train import train, train_full, train_ssl
+from core.train import train, train_full
 from core.test import testA
 from core.pretrain import pretrain
+from core.train_ssl import train as train_ssl
 
 
 class Scaffold(object):
@@ -28,9 +28,8 @@ class Scaffold(object):
         cfg_path: str = "./../config/hyps.yaml",
         model_path: str = None,
     ):
-        model_path = train_ssl(cfg_path, model_path)
-        # train(cfg_path, model_path=model_path)
-        testA(cfg_path, model_path=model_path)
+        train_ssl(cfg_path, model_path)
+        testA(cfg_path, model_path)
 
     def testA(
         self,
