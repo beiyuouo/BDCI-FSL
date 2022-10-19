@@ -25,6 +25,8 @@ from core.train import train_epoch, valid_epoch
 
 
 def get_preds_with_probs(model, loader, device):
+    if len(loader) == 0:
+        return [],[]
     model.eval()
     preds = []
     probs = []

@@ -12,8 +12,13 @@ max_grad_norm: 500
 scheduler: "cosine"
 batch_scheduler: True
 
-epochs: 50
+epochs: 20
 batch_size: 8
+
+loss: "focal"
+focal:
+  gamma: 2.0
+  alpha: 1.0
 
 # pretrain config
 pretrain:
@@ -30,7 +35,7 @@ prob_replace_rand: 0.1
 prob_keep_ori: 0.1
 
 # model config
-model_name: "hfl/chinese-roberta-wwm-ext"
+model_name: "hfl/chinese-bert-wwm-ext"
 num_labels: 36
 
 # data config
@@ -47,9 +52,12 @@ seed: 3407
 chpt_freq: 10
 log_freq: 20
 use_best: True
-from_scratch: False
+from_scratch: True
 with_augment: False
 use_tta: False
+use_kfold: True
+num_folds: 5
+use_tensorboard: True
 
 # ssl
 ssl:
@@ -58,8 +66,8 @@ ssl:
   K: 2
   alpha: 0.75
 
-threshold: 0.8
-warmup_epochs: 10
+threshold: 0.95
+warmup_epochs: 5
 
 # device
 device: "cuda"

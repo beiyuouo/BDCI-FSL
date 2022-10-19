@@ -1,35 +1,13 @@
-from core.train import train, train_full
+from core.train import train
 from core.test import testA
-from core.pretrain import pretrain
-from core.train_ssl import train as train_ssl
 
 
 class Scaffold(object):
     def __init__(self) -> None:
         pass
 
-    def pretrain(
-        self,
-        cfg_path: str = "./../config/hyps.yaml",
-        model_path: str = None,
-    ):
-        pretrain(cfg_path, model_path)
-
     def train(self, cfg_path: str = "./../config/hyps.yaml", model_path: str = None):
         train(cfg_path, model_path)
-
-    def train_full(
-        self, cfg_path: str = "./../config/hyps.yaml", model_path: str = None
-    ):
-        train_full(cfg_path, model_path)
-
-    def train_ssl(
-        self,
-        cfg_path: str = "./../config/hyps.yaml",
-        model_path: str = None,
-    ):
-        train_ssl(cfg_path, model_path)
-        testA(cfg_path, model_path)
 
     def testA(
         self,
@@ -46,6 +24,6 @@ class Scaffold(object):
         self.testA(cfg_path, model_path)
 
     def rush(self):
-        self.pretrain()
+        # self.pretrain()
         self.train()
         self.test()

@@ -1,3 +1,4 @@
+from operator import mod
 import os
 import time
 from pathlib import Path
@@ -6,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import f1_score
 import numpy as np
 import ezkfg as ez
@@ -20,10 +22,14 @@ from core.model import (
     get_tokenizer,
     load_model,
 )
+from core.loss import get_criterion
 
 
-def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
+def train_epoch(
+    epoch, model, data_loader, criterion, optimizer, scheduler, device, cfg, writer=None
+):
     model.train()
+    model.to(device)
     total_loss = 0.0
 
     for step, batch in enumerate(data_loader):
@@ -34,10 +40,9 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
         outputs = model(
             input_ids=input_ids,
             attention_mask=mask,
-            labels=label,
         )
 
-        loss = outputs.loss
+        loss = criterion(outputs, label)
 
         optimizer.zero_grad()
         loss.backward()
@@ -62,8 +67,9 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
     )
 
 
-def valid_epoch(model, data_loader, device, cfg):
+def valid_epoch(model, data_loader, criterion, device, cfg, writer=None):
     model.eval()
+    model.to(device)
     total_loss = 0.0
     preds = []
     labels = []
@@ -71,20 +77,19 @@ def valid_epoch(model, data_loader, device, cfg):
     for step, batch in enumerate(data_loader):
         label = batch["label"].to(device)
         mask = batch["attention_mask"].to(device)
-        token_type_ids = batch["token_type_ids"].to(device)
         input_ids = batch["input_ids"].to(device)
 
         with torch.no_grad():
             outputs = model(
                 input_ids=input_ids,
                 attention_mask=mask,
-                labels=label,
             )
 
-        loss = outputs.loss
+        loss = criterion(outputs, label)
+
         total_loss += loss.item()
 
-        preds.extend(outputs.logits.argmax(dim=1).to("cpu").numpy())
+        preds.extend(outputs.argmax(dim=1).to("cpu").numpy())
         labels.extend(label.to("cpu").numpy())
 
         if (step + 1) % cfg.log_freq == 0 or step == len(data_loader) - 1:
@@ -100,65 +105,53 @@ def valid_epoch(model, data_loader, device, cfg):
     return f1
 
 
-def train(cfg_path: str, model_path: str = None):
-    cfg = init(cfg_path)
-    logger.info(cfg)
+def train_(cfg, model, tokenizer, train_df, valid_df, device, writer=None):
+    assert (
+        len(train_df["label_id"].unique()) == cfg.num_labels
+    ), "train data labels do not have all labels"
+    assert (
+        len(valid_df["label_id"].unique()) == cfg.num_labels
+    ), "valid data labels do not have all labels"
 
-    data_df = load_data(cfg.data_path, split="train")
-    logger.info(data_df.head())
-
-    train_data = data_df.sample(frac=0.9, random_state=cfg.seed)
-    valid_data = data_df.drop(train_data.index).reset_index(drop=True)
-
-    model_path = (
-        Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
-    )
-
-    if cfg.from_scratch:
-        logger.info("training from scratch")
-        model = get_model(cfg.model_name, cfg.num_labels)
-    else:
-        logger.info(f"loading model from {model_path}")
-        model = load_model(model_path, cfg.num_labels)
-
-    tokenizer = get_tokenizer(cfg.model_name)
-
-    train_dataset = FSDataset(train_data, tokenizer)
-    valid_dataset = FSDataset(valid_data, tokenizer)
+    train_dt = FSDataset(train_df, tokenizer, cfg=cfg)
+    valid_dt = FSDataset(valid_df, tokenizer, cfg=cfg)
 
     train_dl = DataLoader(
-        train_dataset,
+        train_dt,
         batch_size=cfg.batch_size,
         shuffle=True,
         num_workers=cfg.num_workers,
+        pin_memory=True,
     )
     valid_dl = DataLoader(
-        valid_dataset,
+        valid_dt,
         batch_size=cfg.batch_size,
         shuffle=False,
         num_workers=cfg.num_workers,
+        pin_memory=True,
     )
-
-    model.to(cfg.device)
-
+    criterion = get_criterion(cfg)
     optimizer = get_optimizer(model, cfg)
-    num_train_steps = int(len(train_dataset) / cfg.batch_size * cfg.epochs)
+    num_train_steps = int(len(train_dt) / cfg.batch_size * cfg.epochs)
     scheduler = get_scheduler(cfg, optimizer, num_train_steps)
 
     best_f1 = 0
+    last_f1 = 0
 
     for epoch in range(cfg.epochs):
         logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
         start_time = time.time()
 
-        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
+        train_epoch(
+            epoch, model, train_dl, criterion, optimizer, scheduler, device, cfg, writer
+        )
         logger.info(
             f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
         )
 
         start_time = time.time()
-        f1_train = valid_epoch(model, train_dl, cfg.device, cfg)
-        f1_val = valid_epoch(model, valid_dl, cfg.device, cfg)
+        f1_train = valid_epoch(model, train_dl, criterion, device, cfg, writer)
+        f1_val = valid_epoch(model, valid_dl, criterion, device, cfg, writer)
         logger.info(
             f"valid epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds f1 train {f1_train:.4f} f1 val {f1_val:.4f}"
         )
@@ -166,133 +159,51 @@ def train(cfg_path: str, model_path: str = None):
         if f1_val > best_f1:
             best_f1 = f1_val
             logger.info(f"best fl val score {best_f1:.4f} saving model")
-            model.save_pretrained(cfg.model_path / "best")
             tokenizer.save_pretrained(cfg.model_path / "best")
+            torch.save(model.state_dict(), cfg.model_path / "best" / "model.pth")
 
         if (epoch + 1) % cfg.chpt_freq == 0:
             logger.info(f"saving model at epoch {epoch + 1}")
-            model.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
             tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
+            torch.save(
+                model.state_dict(), cfg.model_path / f"chpt_{epoch + 1}" / "model.pth"
+            )
+
+        last_f1 = f1_val
 
     logger.info(f"best f1 score {best_f1:.4f}")
-    model.save_pretrained(cfg.model_path / "final")
     tokenizer.save_pretrained(cfg.model_path / "final")
+    torch.save(model.state_dict(), cfg.model_path / "final" / "model.pth")
+
+    return best_f1, last_f1
 
 
-def train_full(cfg_path: str, model_path: str = None):
+def train(cfg_path: str, model_path: str = None):
     cfg = init(cfg_path)
     logger.info(cfg)
 
     data_df = load_data(cfg.data_path, split="train")
     logger.info(data_df.head())
 
-    model_path = (
-        Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
-    )
+    if cfg.use_kfold:
+        # add kfold column
+        for i in range(cfg.num_labels):
+            # add fold for each label with same distribution
+            len_label = len(data_df[data_df["label_id"] == i])
+            num_folds = cfg.num_folds
+            if len_label < cfg.num_folds:
+                num_folds = len_label
 
-    if cfg.from_scratch:
-        model = get_model(cfg.model_name, cfg.num_labels)
-    else:
-        model = load_model(model_path, cfg.num_labels)
-
-    tokenizer = get_tokenizer(cfg.model_name)
-
-    train_dataset = FSDataset(data_df, tokenizer)
-
-    train_dl = DataLoader(
-        train_dataset,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        num_workers=cfg.num_workers,
-    )
-
-    model.to(cfg.device)
-
-    optimizer = get_optimizer(model, cfg)
-    num_train_steps = int(len(train_dataset) / cfg.batch_size * cfg.epochs)
-    scheduler = get_scheduler(cfg, optimizer, num_train_steps)
-
-    best_f1 = 0
-
-    for epoch in range(cfg.epochs):
-        logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
-        start_time = time.time()
-
-        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
-        logger.info(
-            f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
-        )
-
-        f1_train = valid_epoch(model, train_dl, cfg.device, cfg)
-
-        if (epoch + 1) % cfg.chpt_freq == 0:
-            logger.info(f"saving model at epoch {epoch + 1}")
-            model.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
-            tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
-
-        if f1_train > best_f1:
-            best_f1 = f1_train
-            logger.info(f"best f1 score {best_f1:.4f} saving model")
-            model.save_pretrained(cfg.model_path / "best")
-            tokenizer.save_pretrained(cfg.model_path / "best")
-
-    model.save_pretrained(cfg.model_path / "final")
-    tokenizer.save_pretrained(cfg.model_path / "final")
-
-
-def train_epoch_us(epoch, model, unlabeled_dl, optimizer, scheduler, device, cfg):
-    model.train()
-    total_loss = 0.0
-
-    for step, batch in enumerate(unlabeled_dl):
-        mask = batch["attention_mask"].to(device)
-        input_ids = batch["input_ids"].to(device)
-
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=mask,
-        )
-
-        fake_labels = outputs.logits.argmax(dim=1).detach()
-
-        loss = F.cross_entropy(outputs.logits, fake_labels)
-
-        optimizer.zero_grad()
-        loss.backward()
-        total_loss += loss.item()
-
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            model.parameters(), cfg.max_grad_norm
-        )
-
-        optimizer.step()
-
-        if scheduler is not None:
-            scheduler.step()
-
-        if (step + 1) % cfg.log_freq == 0 or step == len(unlabeled_dl) - 1:
-            logger.info(
-                f"epoch {epoch + 1} / {cfg.epochs} step {step + 1} / {len(unlabeled_dl)} loss {loss.item():.4f} loss avg {total_loss / (step + 1):.4f} grad norm {grad_norm:.4f}"
+            data_df.loc[data_df["label_id"] == i, "fold"] = (
+                np.arange(len_label) % cfg.num_folds
             )
 
-    logger.info(
-        f"epoch {epoch + 1} / {cfg.epochs} unsupervised loss {total_loss / (step + 1):.4f}"
-    )
+        data_df["fold"] = data_df["fold"].astype(int)
+        # data_df[data_df["label"] == i]["fold"] = np
 
-
-def train_epoch_ssl(
-    epoch, model, labeled_dl, unlabeled_dl, optimizer, scheduler, device, cfg
-):
-    train_epoch(epoch, model, labeled_dl, optimizer, scheduler, device, cfg)
-    train_epoch_us(epoch, model, unlabeled_dl, optimizer, scheduler, device, cfg)
-
-
-def train_ssl_base(cfg_path: str, model_path: str = None):
-    cfg = init(cfg_path)
-    logger.info(cfg)
-
-    labeled_df = load_data(cfg.data_path, split="train")
-    unlabeled_df = load_data(cfg.data_path, split="test")
+    else:
+        train_df = data_df.sample(frac=0.8, random_state=cfg.seed)
+        valid_df = data_df.drop(train_df.index).reset_index(drop=True)
 
     model_path = (
         Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
@@ -307,226 +218,35 @@ def train_ssl_base(cfg_path: str, model_path: str = None):
 
     tokenizer = get_tokenizer(cfg.model_name)
 
-    labeled_ds = FSDataset(labeled_df, tokenizer)
-    unlabeled_ds = FSDataset(unlabeled_df, tokenizer, is_test=True)
-
-    labeled_dl = DataLoader(
-        labeled_ds,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        num_workers=cfg.num_workers,
-    )
-
-    unlabeled_dl = DataLoader(
-        unlabeled_ds,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        num_workers=cfg.num_workers,
-    )
-
-    logger.info(f"labeled dataset size {len(labeled_ds)}")
-    logger.info(f"unlabeled dataset size {len(unlabeled_ds)}")
-
-    model.to(cfg.device)
-
-    optimizer = get_optimizer(model, cfg)
-    num_train_steps = int(len(labeled_ds) / cfg.batch_size * cfg.epochs)
-    scheduler = get_scheduler(cfg, optimizer, num_train_steps)
-
-    best_f1 = 0
-
-    for epoch in range(cfg.epochs):
-        logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
-        start_time = time.time()
-
-        train_epoch_ssl(
-            epoch,
-            model,
-            labeled_dl,
-            unlabeled_dl,
-            optimizer,
-            scheduler,
-            cfg.device,
-            cfg,
-        )
-        logger.info(
-            f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
-        )
-
-        f1_train = valid_epoch(model, labeled_dl, cfg.device, cfg)
-
-        if (epoch + 1) % cfg.chpt_freq == 0:
-            logger.info(f"saving model at epoch {epoch + 1}")
-            model.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
-            tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
-
-    for epoch in range(cfg.epochs):
-        logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
-        start_time = time.time()
-
-        train_epoch()
-
-    model.save_pretrained(cfg.model_path / "final")
-    tokenizer.save_pretrained(cfg.model_path / "final")
-
-
-def train_ssl(cfg_path: str, model_path: str = None):
-    cfg = init(cfg_path)
-    logger.info(cfg)
-
-    labeled_df = load_data(cfg.data_path, split="train")
-    unlabeled_df = load_data(cfg.data_path, split="test")
-
-    model_path = (
-        Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
-    )
-
-    if cfg.from_scratch:
-        logger.info("training from scratch")
-        model = get_model(cfg.model_name, cfg.num_labels)
+    if cfg.use_tensorboard:
+        tb_writer = SummaryWriter(cfg.log_path)
     else:
-        logger.info(f"loading model from {model_path}")
-        model = load_model(model_path, cfg.num_labels)
+        tb_writer = None
 
-    tokenizer = get_tokenizer(cfg.model_name)
+    if cfg.use_kfold:
+        best_f1, last_f1 = [], []
+        for fold in range(cfg.num_folds):
+            logger.info(f"fold {fold + 1} / {cfg.num_folds}")
+            train_df = data_df[data_df["fold"] != fold]
+            valid_df = data_df[data_df["fold"] == fold]
 
-    labeled_dt = labeled_df.sample(frac=0.9, random_state=cfg.seed)
-    valid_dt = labeled_df.drop(labeled_dt.index).reset_index(drop=True)
+            if cfg.from_scratch:
+                logger.info("training from scratch")
+                model = get_model(cfg.model_name, cfg.num_labels)
+            else:
+                logger.info(f"loading model from {model_path}")
+                model = load_model(model_path, cfg.num_labels)
 
-    labeled_ds = FSDataset(labeled_dt, tokenizer)
-    valid_ds = FSDataset(valid_dt, tokenizer)
-    unlabeled_ds = FSDataset(unlabeled_df, tokenizer, is_test=True)
-
-    labeled_dl = DataLoader(
-        labeled_ds,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        num_workers=cfg.num_workers,
-    )
-
-    valid_dl = DataLoader(
-        valid_ds,
-        batch_size=cfg.batch_size,
-        shuffle=False,
-        num_workers=cfg.num_workers,
-    )
-
-    unlabeled_dl = DataLoader(
-        unlabeled_ds,
-        batch_size=cfg.batch_size,
-        shuffle=True,
-        num_workers=cfg.num_workers,
-    )
-
-    logger.info(f"labeled dataset size {len(labeled_ds)}")
-    logger.info(f"unlabeled dataset size {len(unlabeled_ds)}")
-
-    model.to(cfg.device)
-
-    optimizer = get_optimizer(model, cfg)
-    num_train_steps = int(len(unlabeled_ds) / cfg.batch_size * cfg.epochs)
-    scheduler = get_scheduler(cfg, optimizer, num_train_steps)
-
-    label_iter = iter(labeled_dl)
-    unlabel_iter = iter(unlabeled_dl)
-
-    total_steps = int(len(unlabeled_ds) / cfg.batch_size * cfg.epochs)
-    epoch_step = int(len(unlabeled_ds) / cfg.batch_size)
-    # total_steps = epoch_step
-    epoch = 0
-
-    best_f1 = 0
-    start_time = time.time()
-
-    for step in range(total_steps):
-        # logger.info(f"step {step + 1} / {total_steps}")
-
-        train_loss = 0.0
-        model.train()
-
-        try:
-            labeled_batch = next(label_iter)
-        except StopIteration:
-            label_iter = iter(labeled_dl)
-            labeled_batch = next(label_iter)
-
-        try:
-            unlabeled_batch = next(unlabel_iter)
-        except StopIteration:
-            unlabel_iter = iter(unlabeled_dl)
-            unlabeled_batch = next(unlabel_iter)
-
-        labeled_ids = labeled_batch["input_ids"].to(cfg.device)
-        labeled_mask = labeled_batch["attention_mask"].to(cfg.device)
-        labeled_labels = labeled_batch["label"].to(cfg.device)
-
-        unlabeled_ids = unlabeled_batch["input_ids"].to(cfg.device)
-        unlabeled_mask = unlabeled_batch["attention_mask"].to(cfg.device)
-
-        model.eval()
-        fake_labels = (
-            model(unlabeled_ids, attention_mask=unlabeled_mask)
-            .logits.argmax(dim=1)
-            .detach()
-        )
-        # logger.info(f"fake labels {fake_labels}")
-        model.train()
-
-        optimizer.zero_grad()
-        model.zero_grad()
-
-        unlabeled_ouputs = model(
-            unlabeled_ids, attention_mask=unlabeled_mask, labels=fake_labels
-        )
-
-        labeled_ouputs = model(
-            labeled_ids, attention_mask=labeled_mask, labels=labeled_labels
-        )
-
-        # sharpening
-        # fake_labels = torch.softmax(unlabeled_ouputs.logits / cfg.ssl.T, dim=1).argmax(
-        #     dim=1
-        # )
-
-        loss = labeled_ouputs.loss + cfg.ssl.lambda_u * unlabeled_ouputs.loss
-
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
-
-        train_loss += loss.item()
-
-        if (step + 1) % cfg.log_freq == 0:
-            logger.info(
-                f"train step {step + 1} / {total_steps} done in {time.time() - start_time:.2f} seconds with loss {loss.item():.4f} labeled loss {labeled_ouputs.loss.item():.4f} unlabeled loss {unlabeled_ouputs.loss.item():.4f}"
+            best_f1_, last_f1_ = train_(
+                cfg, model, tokenizer, train_df, valid_df, cfg.device, tb_writer
             )
+            best_f1.append(best_f1_)
+            last_f1.append(last_f1_)
 
-        if (step + 1) % epoch_step == 0:
-            epoch += 1
-            logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
-            start_time = time.time()
-            train_loss = 0.0
+            logger.info(f"fold {fold + 1} / {cfg.num_folds} done")
 
-            model.eval()
-
-            f1_train = valid_epoch(model, labeled_dl, cfg.device, cfg)
-            f1_valid = valid_epoch(model, valid_dl, cfg.device, cfg)
-            logger.info(
-                f"train f1 {f1_train:.4f} valid f1 {f1_valid:.4f} in {time.time() - start_time:.2f} seconds"
-            )
-
-            if f1_valid > best_f1:
-                best_f1 = f1_valid
-                logger.info(f"save model with f1 {best_f1:.4f}")
-                model.save_pretrained(cfg.model_path / "best_ssl")
-                tokenizer.save_pretrained(cfg.model_path / "best_ssl")
-
-            if (epoch + 1) % cfg.chpt_freq == 0:
-                logger.info(f"save model at epoch {epoch + 1}")
-                model.save_pretrained(cfg.model_path / f"ssl_{epoch + 1}")
-                tokenizer.save_pretrained(cfg.model_path / f"ssl_{epoch + 1}")
-
-    model.save_pretrained(cfg.model_path / "final_ssl")
-    tokenizer.save_pretrained(cfg.model_path / "final_ssl")
-
-    return cfg.model_path / "final_ssl"
+        logger.info(
+            f"best f1 score {np.mean(best_f1):.4f} last f1 score {np.mean(last_f1):.4f}"
+        )
+    else:
+        train_(cfg, model, tokenizer, train_df, valid_df, cfg.device, tb_writer)

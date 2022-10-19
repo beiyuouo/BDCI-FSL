@@ -2,6 +2,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     AutoModelForMaskedLM,
+    BertModel,
 )
 from transformers import (
     get_linear_schedule_with_warmup,
@@ -9,16 +10,47 @@ from transformers import (
     DataCollatorWithPadding,
 )
 import torch
+import torch.nn as nn
 from torch.optim import AdamW
 
 
-def get_model(model_name: str = "hfl/chinese-roberta-wwm-ext", num_labels: int = 36):
-    return AutoModelForSequenceClassification.from_pretrained(
-        model_name, num_labels=num_labels
-    )
+class BDCIModel(nn.Module):
+    def __init__(self, model_name, num_labels):
+        super().__init__()
+
+        self.bert = BertModel.from_pretrained(model_name)
+        self.dropout = nn.Dropout(0.1)
+        self.classifier = nn.Linear(768, num_labels)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, input_ids, attention_mask, token_type_ids=None):
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        )
+
+        last_hidden_state, pooler_output = (
+            outputs.last_hidden_state,
+            outputs.pooler_output,
+        )
+
+        pooled_output = self.dropout(pooler_output)
+        logits = self.classifier(pooled_output)
+        logits = self.sigmoid(logits)
+
+        return logits
+
+    def freeze_bert_encoder(self):
+        for param in self.bert.parameters():
+            param.requires_grad = False
 
 
-def get_tokenizer(model_name: str = "hfl/chinese-roberta-wwm-ext"):
+def get_model(model_name: str = "hfl/chinese-bert-wwm-ext", num_labels: int = 36):
+    return BDCIModel(model_name, num_labels)
+
+
+def get_tokenizer(model_name: str = "hfl/chinese-bert-wwm-ext"):
     return AutoTokenizer.from_pretrained(model_name)
 
 

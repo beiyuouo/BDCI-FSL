@@ -24,7 +24,10 @@ class FSDataset(Dataset):
         title = self.title[item]
         assignee = self.assignee[item]
         abstract = self.abstract[item]
-        input_text = title + self.sep_token + assignee + self.sep_token + abstract
+
+        abstract = abstract.replace("。", self.sep_token)
+
+        input_text = f"标题: {title} {self.sep_token} 申请人: {assignee} {self.sep_token} 摘要: {abstract}"
 
         return input_text
 
