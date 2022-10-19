@@ -140,12 +140,21 @@ def valid_epoch(model, data_loader, criterion, device, cfg, writer=None, _prefix
 
 
 def train_(cfg, model, tokenizer, train_df, valid_df, device, writer=None, _prefix=""):
-    assert (
-        len(train_df["label_id"].unique()) == cfg.num_labels
-    ), "train data labels do not have all labels"
-    assert (
-        len(valid_df["label_id"].unique()) == cfg.num_labels
-    ), "valid data labels do not have all labels"
+    # assert (
+    #     len(train_df["label_id"].unique()) == cfg.num_labels
+    # ), "train data labels do not have all labels"
+    # assert (
+    #     len(valid_df["label_id"].unique()) == cfg.num_labels
+    # ), "valid data labels do not have all labels"
+
+    if len(train_df["label_id"].unique()) != cfg.num_labels:
+        logger.warning(
+            f"train data labels do not have all labels, {len(train_df['label_id'].unique())} != {cfg.num_labels}"
+        )
+    if len(valid_df["label_id"].unique()) != cfg.num_labels:
+        logger.warning(
+            f"valid data labels do not have all labels, {len(valid_df['label_id'].unique())} != {cfg.num_labels}"
+        )
 
     train_dt = FSDataset(train_df, tokenizer, cfg=cfg)
     valid_dt = FSDataset(valid_df, tokenizer, cfg=cfg)
