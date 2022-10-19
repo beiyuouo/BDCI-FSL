@@ -98,7 +98,7 @@ def train(cfg_path: str, model_path: str = None):
         logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
         start_time = time.time()
 
-        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
+        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg, writer)
         logger.info(
             f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
         )

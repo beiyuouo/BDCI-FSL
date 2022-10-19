@@ -9,6 +9,8 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 import numpy as np
 import ezkfg as ez
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from utils.init import init
 from utils.data import load_data
@@ -22,7 +24,7 @@ from core.model import (
 )
 
 
-def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
+def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg, writer=None):
     model.train()
     total_loss = 0.0
 
@@ -46,6 +48,7 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
         grad_norm = torch.nn.utils.clip_grad_norm_(
             model.parameters(), cfg.max_grad_norm
         )
+        # grad_norm=0
 
         optimizer.step()
 
@@ -55,14 +58,23 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
         if (step + 1) % cfg.log_freq == 0 or step == len(data_loader) - 1:
             logger.info(
                 f"epoch {epoch + 1} / {cfg.epochs} step {step + 1} / {len(data_loader)} loss {loss.item():.4f} loss avg {total_loss / (step + 1):.4f} grad norm {grad_norm:.4f}"
-            )
+            )   
+            if scheduler is not None:
+                lr=scheduler.get_last_lr()[0]
+            else:
+                lr=cfg['encoder_lr']
+            if writer:
+                writer.add_scalar('Loss/train_step', loss.item(),(epoch + 1)*len(data_loader) + step + 1)
+                writer.add_scalar('lr/train_step', lr,(epoch + 1)*len(data_loader) + step + 1)
 
     logger.info(
         f"epoch {epoch + 1} / {cfg.epochs} train loss {total_loss / (step + 1):.4f}"
     )
+    if writer:
+        writer.add_scalar('Loss/train_epoch', total_loss / (step + 1), epoch + 1)
 
 
-def valid_epoch(model, data_loader, device, cfg):
+def valid_epoch(epoch, model, data_loader, device, cfg, writer=None,verbose=False):
     model.eval()
     total_loss = 0.0
     preds = []
@@ -86,16 +98,29 @@ def valid_epoch(model, data_loader, device, cfg):
 
         preds.extend(outputs.logits.argmax(dim=1).to("cpu").numpy())
         labels.extend(label.to("cpu").numpy())
-
         if (step + 1) % cfg.log_freq == 0 or step == len(data_loader) - 1:
             logger.info(
                 f"step {step + 1} / {len(data_loader)} loss {loss.item():.4f} loss avg {total_loss / (step + 1):.4f}"
             )
-
+            if writer:
+                writer.add_scalar('Loss/val_step', loss.item(),(epoch + 1)*len(data_loader) + step + 1)
+    if verbose:
+        correct=[0]*36
+        total=[0]*36
+        for i in range(len(preds)):
+            total[labels[i]]+=1
+            correct[labels[i]]+=int(labels[i]==preds[i])
+        print("label\tcorrect\ttotal\tprecision")
+        for j in range(len(correct)):
+            print(f"{j}\t{correct[j]}\t{total[j]}\t{correct[j]/total[j]:4f}")
+            
+    if writer:
+        writer.add_scalar('Loss/val_epoch', total_loss / (step + 1), epoch + 1)
     preds = np.array(preds)
     labels = np.array(labels)
     f1 = f1_score(labels, preds, average="macro")
-    # logger.info(f"f1 score {f1:.4f}")
+    if verbose:
+        logger.info(f"f1 score {f1:.4f}")
 
     return f1
 
@@ -106,9 +131,11 @@ def train(cfg_path: str, model_path: str = None):
 
     data_df = load_data(cfg.data_path, split="train")
     logger.info(data_df.head())
-
-    train_data = data_df.sample(frac=0.9, random_state=cfg.seed)
+    train_data = data_df.sample(frac=0.8, random_state=cfg.seed)
     valid_data = data_df.drop(train_data.index).reset_index(drop=True)
+    assert(set(valid_data["label_id"])==set(range(36)))
+    #TensorBoard
+    writer=SummaryWriter(cfg["log_path"])
 
     model_path = (
         Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
@@ -142,7 +169,7 @@ def train(cfg_path: str, model_path: str = None):
     model.to(cfg.device)
 
     optimizer = get_optimizer(model, cfg)
-    num_train_steps = int(len(train_dataset) / cfg.batch_size * cfg.epochs)
+    num_train_steps = int(len(train_dataset) / cfg.batch_size) * cfg.epochs
     scheduler = get_scheduler(cfg, optimizer, num_train_steps)
 
     best_f1 = 0
@@ -151,18 +178,20 @@ def train(cfg_path: str, model_path: str = None):
         logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
         start_time = time.time()
 
-        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
+        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg,writer)
         logger.info(
             f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
         )
 
         start_time = time.time()
-        f1_train = valid_epoch(model, train_dl, cfg.device, cfg)
-        f1_val = valid_epoch(model, valid_dl, cfg.device, cfg)
+        f1_train = valid_epoch(epoch,model, train_dl, cfg.device, cfg,writer)
+        f1_val = valid_epoch(epoch,model, valid_dl, cfg.device, cfg,writer)
         logger.info(
             f"valid epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds f1 train {f1_train:.4f} f1 val {f1_val:.4f}"
         )
-
+        if writer:
+            writer.add_scalar('F1/train_epoch', f1_train, epoch + 1)
+            writer.add_scalar('F1/val_epoch', f1_val, epoch + 1)
         if f1_val > best_f1:
             best_f1 = f1_val
             logger.info(f"best fl val score {best_f1:.4f} saving model")
@@ -173,7 +202,9 @@ def train(cfg_path: str, model_path: str = None):
             logger.info(f"saving model at epoch {epoch + 1}")
             model.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
             tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
-
+    if writer:
+        writer.close()
+    valid_epoch(epoch,model, valid_dl, cfg.device, cfg,writer,verbose=True)
     logger.info(f"best f1 score {best_f1:.4f}")
     model.save_pretrained(cfg.model_path / "final")
     tokenizer.save_pretrained(cfg.model_path / "final")
@@ -218,12 +249,12 @@ def train_full(cfg_path: str, model_path: str = None):
         logger.info(f"epoch {epoch + 1} / {cfg.epochs}")
         start_time = time.time()
 
-        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg)
+        train_epoch(epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg,writer)
         logger.info(
             f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
         )
 
-        f1_train = valid_epoch(model, train_dl, cfg.device, cfg)
+        f1_train = valid_epoch(epoch,model, train_dl, cfg.device, cfg)
 
         if (epoch + 1) % cfg.chpt_freq == 0:
             logger.info(f"saving model at epoch {epoch + 1}")
@@ -240,7 +271,7 @@ def train_full(cfg_path: str, model_path: str = None):
     tokenizer.save_pretrained(cfg.model_path / "final")
 
 
-def train_epoch_us(epoch, model, unlabeled_dl, optimizer, scheduler, device, cfg):
+def train_epoch_us(epoch, model, unlabeled_dl, optimizer, scheduler, device, cfg, writer):
     model.train()
     total_loss = 0.0
 
@@ -281,10 +312,10 @@ def train_epoch_us(epoch, model, unlabeled_dl, optimizer, scheduler, device, cfg
 
 
 def train_epoch_ssl(
-    epoch, model, labeled_dl, unlabeled_dl, optimizer, scheduler, device, cfg
+    epoch, model, labeled_dl, unlabeled_dl, optimizer, scheduler, device, cfg, writer
 ):
-    train_epoch(epoch, model, labeled_dl, optimizer, scheduler, device, cfg)
-    train_epoch_us(epoch, model, unlabeled_dl, optimizer, scheduler, device, cfg)
+    train_epoch(epoch, model, labeled_dl, optimizer, scheduler, device, cfg, writer)
+    train_epoch_us(epoch, model, unlabeled_dl, optimizer, scheduler, device, cfg, writer)
 
 
 def train_ssl_base(cfg_path: str, model_path: str = None):
@@ -348,12 +379,13 @@ def train_ssl_base(cfg_path: str, model_path: str = None):
             scheduler,
             cfg.device,
             cfg,
+            writer,
         )
         logger.info(
             f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
         )
 
-        f1_train = valid_epoch(model, labeled_dl, cfg.device, cfg)
+        f1_train = valid_epoch(epoch,model, labeled_dl, cfg.device, cfg)
 
         if (epoch + 1) % cfg.chpt_freq == 0:
             logger.info(f"saving model at epoch {epoch + 1}")
@@ -509,8 +541,8 @@ def train_ssl(cfg_path: str, model_path: str = None):
 
             model.eval()
 
-            f1_train = valid_epoch(model, labeled_dl, cfg.device, cfg)
-            f1_valid = valid_epoch(model, valid_dl, cfg.device, cfg)
+            f1_train = valid_epoch(epoch,model, labeled_dl, cfg.device, cfg)
+            f1_valid = valid_epoch(epoch,model, valid_dl, cfg.device, cfg)
             logger.info(
                 f"train f1 {f1_train:.4f} valid f1 {f1_valid:.4f} in {time.time() - start_time:.2f} seconds"
             )

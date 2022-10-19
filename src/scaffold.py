@@ -2,6 +2,7 @@ from core.train import train, train_full
 from core.test import testA
 from core.pretrain import pretrain
 from core.train_ssl import train as train_ssl
+from core.valid import valid
 
 
 class Scaffold(object):
@@ -44,7 +45,12 @@ class Scaffold(object):
         model_path: str = None,
     ):
         self.testA(cfg_path, model_path)
-
+    def valid(
+        self,
+        cfg_path: str = "./../config/hyps.yaml",
+        model_path: str = None,
+    ):
+        valid(cfg_path, model_path)
     def rush(self):
         self.pretrain()
         self.train()

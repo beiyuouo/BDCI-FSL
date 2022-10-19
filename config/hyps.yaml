@@ -1,11 +1,12 @@
 # training hyperparameters
-encoder_lr: !!float 20e-6
-decoder_lr: !!float 20e-6
+encoder_lr: !!float 30e-6
+decoder_lr: !!float 30e-6
+linear_lr: !!float 4e-5
 eps: !!float 1e-6
 betas: [0.9, 0.999]
 weight_decay: 0.0
 num_cycles: 0.5
-num_warmup_steps: 0
+num_warmup_steps: 100
 max_input_length: 1024
 max_grad_norm: 500
 
@@ -43,11 +44,11 @@ exp_name: "exp"
 export_path: "./../export"
 
 # misc
-seed: 3407
+seed: 982
 chpt_freq: 10
 log_freq: 20
-use_best: True
-from_scratch: False
+use_best: True 
+from_scratch: True
 with_augment: False
 use_tta: False
 

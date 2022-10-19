@@ -1,8 +1,10 @@
+from csv import writer
 import pandas as pd
 from loguru import logger
 import torch
 import time
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from utils.init import init
 from utils.data import load_data
@@ -16,7 +18,7 @@ from core.model import (
 from core.dataset import FSDataset
 
 
-def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
+def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg, writer):
     model.train()
     training_loss = 0.0
     for step, batch in enumerate(data_loader):
@@ -46,6 +48,8 @@ def train_epoch(epoch, model, data_loader, optimizer, scheduler, device, cfg):
 def pretrain(cfg_path: str = "config/hyps.yaml", model_path: str = None):
     cfg = init(cfg_path)
     logger.info(f"config: {cfg}")
+
+    writer=SummaryWriter(cfg["log_path"])
 
     if model_path is None:
         model = get_maskedlm_model(cfg.model_name)
@@ -84,7 +88,7 @@ def pretrain(cfg_path: str = "config/hyps.yaml", model_path: str = None):
         start_time = time.time()
 
         training_loss = train_epoch(
-            epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg
+            epoch, model, train_dl, optimizer, scheduler, cfg.device, cfg, writer
         )
         logger.info(
             f"train epoch {epoch + 1} / {cfg.pretrain.epochs} done in {time.time() - start_time:.2f} seconds with loss {training_loss:.4f}"

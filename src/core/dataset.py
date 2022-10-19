@@ -24,7 +24,7 @@ class FSDataset(Dataset):
         title = self.title[item]
         assignee = self.assignee[item]
         abstract = self.abstract[item]
-        input_text = title + self.sep_token + assignee + self.sep_token + abstract
+        input_text = title + self.sep_token + assignee + self.sep_token + abstract 
 
         return input_text
 
