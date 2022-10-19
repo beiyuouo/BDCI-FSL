@@ -26,11 +26,22 @@ from core.loss import get_criterion
 
 
 def train_epoch(
-    epoch, model, data_loader, criterion, optimizer, scheduler, device, cfg, writer=None
+    epoch,
+    model,
+    data_loader,
+    criterion,
+    optimizer,
+    scheduler,
+    device,
+    cfg,
+    writer=None,
+    _prefix="",
 ):
     model.train()
     model.to(device)
     total_loss = 0.0
+    preds = []
+    labels = []
 
     for step, batch in enumerate(data_loader):
         label = batch["label"].to(device)
@@ -41,6 +52,9 @@ def train_epoch(
             input_ids=input_ids,
             attention_mask=mask,
         )
+
+        preds.extend(outputs.argmax(dim=1).to("cpu").numpy())
+        labels.extend(label.to("cpu").numpy())
 
         loss = criterion(outputs, label)
 
@@ -57,6 +71,20 @@ def train_epoch(
         if scheduler is not None:
             scheduler.step()
 
+        writer.add_scalar(
+            f"{_prefix}_train_step/loss", loss.item(), epoch * len(data_loader) + step
+        )
+        writer.add_scalar(
+            f"{_prefix}_train_step/grad_norm",
+            grad_norm,
+            epoch * len(data_loader) + step,
+        )
+        writer.add_scalar(
+            f"{_prefix}_train_step/lr",
+            optimizer.param_groups[0]["lr"],
+            epoch * len(data_loader) + step,
+        )
+
         if (step + 1) % cfg.log_freq == 0 or step == len(data_loader) - 1:
             logger.info(
                 f"epoch {epoch + 1} / {cfg.epochs} step {step + 1} / {len(data_loader)} loss {loss.item():.4f} loss avg {total_loss / (step + 1):.4f} grad norm {grad_norm:.4f}"
@@ -65,9 +93,10 @@ def train_epoch(
     logger.info(
         f"epoch {epoch + 1} / {cfg.epochs} train loss {total_loss / (step + 1):.4f}"
     )
+    return total_loss / (step + 1)
 
 
-def valid_epoch(model, data_loader, criterion, device, cfg, writer=None):
+def valid_epoch(model, data_loader, criterion, device, cfg, writer=None, _prefix=""):
     model.eval()
     model.to(device)
     total_loss = 0.0
@@ -102,10 +131,15 @@ def valid_epoch(model, data_loader, criterion, device, cfg, writer=None):
     f1 = f1_score(labels, preds, average="macro")
     # logger.info(f"f1 score {f1:.4f}")
 
-    return f1
+    return (
+        f1,
+        total_loss / (step + 1),
+        preds,
+        labels,
+    )
 
 
-def train_(cfg, model, tokenizer, train_df, valid_df, device, writer=None):
+def train_(cfg, model, tokenizer, train_df, valid_df, device, writer=None, _prefix=""):
     assert (
         len(train_df["label_id"].unique()) == cfg.num_labels
     ), "train data labels do not have all labels"
@@ -143,15 +177,52 @@ def train_(cfg, model, tokenizer, train_df, valid_df, device, writer=None):
         start_time = time.time()
 
         train_epoch(
-            epoch, model, train_dl, criterion, optimizer, scheduler, device, cfg, writer
+            epoch,
+            model,
+            train_dl,
+            criterion,
+            optimizer,
+            scheduler,
+            device,
+            cfg,
+            writer,
+            _prefix=_prefix,
         )
         logger.info(
             f"train epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds"
         )
 
         start_time = time.time()
-        f1_train = valid_epoch(model, train_dl, criterion, device, cfg, writer)
-        f1_val = valid_epoch(model, valid_dl, criterion, device, cfg, writer)
+        f1_train, loss_train, preds_train, labels_train = valid_epoch(
+            model,
+            train_dl,
+            criterion,
+            device,
+            cfg,
+            writer,
+            _prefix=_prefix,
+        )
+        f1_val, loss_val, preds_val, labels_val = valid_epoch(
+            model,
+            valid_dl,
+            criterion,
+            device,
+            cfg,
+            writer,
+            _prefix=_prefix,
+        )
+        writer.add_scalar(f"{_prefix}_valid_epoch/f1", f1_val, epoch)
+        writer.add_scalar(
+            f"{_prefix}_valid_epoch/acc", (labels_val == preds_val).mean(), epoch
+        )
+        writer.add_scalar(f"{_prefix}_valid_epoch/loss", loss_val, epoch)
+
+        writer.add_scalar(f"{_prefix}_train_epoch/f1", f1_train, epoch)
+        writer.add_scalar(
+            f"{_prefix}_train_epoch/acc", (labels_train == preds_train).mean(), epoch
+        )
+        writer.add_scalar(f"{_prefix}_train_epoch/loss", loss_train, epoch)
+
         logger.info(
             f"valid epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds f1 train {f1_train:.4f} f1 val {f1_val:.4f}"
         )
@@ -194,6 +265,7 @@ def train(cfg_path: str, model_path: str = None):
             if len_label < cfg.num_folds:
                 num_folds = len_label
 
+            # TODO: random selection of folds
             data_df.loc[data_df["label_id"] == i, "fold"] = (
                 np.arange(len_label) % cfg.num_folds
             )
@@ -238,7 +310,14 @@ def train(cfg_path: str, model_path: str = None):
                 model = load_model(model_path, cfg.num_labels)
 
             best_f1_, last_f1_ = train_(
-                cfg, model, tokenizer, train_df, valid_df, cfg.device, tb_writer
+                cfg,
+                model,
+                tokenizer,
+                train_df,
+                valid_df,
+                cfg.device,
+                tb_writer,
+                _prefix=f"fold_{fold + 1}",
             )
             best_f1.append(best_f1_)
             last_f1.append(last_f1_)
@@ -249,4 +328,6 @@ def train(cfg_path: str, model_path: str = None):
             f"best f1 score {np.mean(best_f1):.4f} last f1 score {np.mean(last_f1):.4f}"
         )
     else:
-        train_(cfg, model, tokenizer, train_df, valid_df, cfg.device, tb_writer)
+        train_(
+            cfg, model, tokenizer, train_df, valid_df, cfg.device, tb_writer, _prefix=""
+        )
