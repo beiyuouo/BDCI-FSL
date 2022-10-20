@@ -3,6 +3,7 @@ from loguru import logger
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+import time
 
 from utils.init import init
 from utils.data import load_data
@@ -42,16 +43,14 @@ def testA(cfg_path: str, model_path: str):
     for step, batch in enumerate(test_dl):
         input_ids = batch["input_ids"].to(cfg.device)
         attention_mask = batch["attention_mask"].to(cfg.device)
-        token_type_ids = batch["token_type_ids"].to(cfg.device)
 
         with torch.no_grad():
             outputs = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                token_type_ids=token_type_ids,
             )
 
-        preds.extend(outputs.logits.argmax(dim=1).to("cpu").numpy())
+        preds.extend(outputs.argmax(dim=1).to("cpu").numpy())
 
         if (step + 1) % cfg.log_freq == 0 or step == len(test_dl) - 1:
             logger.info(f"step: {step}/{len(test_dl)}")
@@ -63,7 +62,8 @@ def testA(cfg_path: str, model_path: str):
     test_df_export = test_df[["id", "label"]]
     test_df_export.to_csv(
         os.path.join(
-            cfg.export_path, f"test_submit_A_ep{cfg.epochs}_bs{cfg.batch_size}.csv"
+            cfg.export_path,
+            f"test_submit_A_ep{cfg.epochs}_bs{cfg.batch_size}_{int(time.time())}.csv",
         ),
         index=False,
     )
