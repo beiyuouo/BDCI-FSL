@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 import time
+from pathlib import Path
 
 from utils.init import init
 from utils.data import load_data
@@ -94,7 +95,7 @@ def testA_with_weights(cfg_path: str, model_path: str):
         num_workers=0,
     )
 
-    label_weights = np.load(cfg.data_path / "label_weights.npy")
+    label_weights = np.load(Path(cfg.data_path) / "label_weights.npy")
 
     model.to(cfg.device)
     model.eval()
@@ -111,9 +112,8 @@ def testA_with_weights(cfg_path: str, model_path: str):
             )
 
         outputs_ = outputs.to("cpu").numpy()
-
         outputs_ = outputs_ * (1.0 - label_weights)
-        preds.extend(outputs_.argmax(dim=1))
+        preds.extend(outputs_.argmax(axis=1))
 
         if (step + 1) % cfg.log_freq == 0 or step == len(test_dl) - 1:
             logger.info(f"step: {step}/{len(test_dl)}")
