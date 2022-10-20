@@ -45,6 +45,9 @@ def cluster(cfg_path: str, model_path: str = None):
         data_ds, batch_size=cfg.batch_size, shuffle=False, num_workers=0
     )
 
+    model.eval()
+    model.to(cfg.device)
+
     embs = []
     for i, batch in enumerate(data_dl):
         input_ids = batch["input_ids"].to(cfg.device)
@@ -62,16 +65,16 @@ def cluster(cfg_path: str, model_path: str = None):
 
     embs = np.array(embs)
 
-    np.save(cfg.data_path / "train_embeddings.npy", embs)
+    np.save(Path(cfg.data_path) / "train_embeddings.npy", embs)
 
     label_avg_embeds = []
 
-    for i, group in data_df.groupby("label"):
+    for i, group in data_df.groupby("label_id"):
         label_avg_embeds.append(np.mean(embs[group.index], axis=0))
         print(i, len(group))
 
     label_avg_embeds = np.array(label_avg_embeds)
-    np.save(cfg.data_path / "label_embeddings.npy", label_avg_embeds)
+    np.save(os.path.join(cfg.data_path, "label_embeddings.npy"), label_avg_embeds)
 
     test_df = load_data(cfg.data_path, split="test")
     test_ds = FSDataset(test_df, tokenizer, is_test=True, cfg=cfg)
