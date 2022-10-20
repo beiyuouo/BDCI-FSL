@@ -71,17 +71,17 @@ def train_epoch(
         if scheduler is not None:
             scheduler.step()
 
-        writer.add_scalar(
-            f"{_prefix}_train_step/loss", loss.item(), epoch * len(data_loader) + step
+        writer.add_scalars(
+            f"train_step/loss", {_prefix: loss.item()}, epoch * len(data_loader) + step
         )
-        writer.add_scalar(
-            f"{_prefix}_train_step/grad_norm",
-            grad_norm,
+        writer.add_scalars(
+            f"train_step/grad_norm",
+            {_prefix: grad_norm},
             epoch * len(data_loader) + step,
         )
-        writer.add_scalar(
-            f"{_prefix}_train_step/lr",
-            optimizer.param_groups[0]["lr"],
+        writer.add_scalars(
+            f"train_step/lr",
+            {_prefix: optimizer.param_groups[0]["lr"]},
             epoch * len(data_loader) + step,
         )
 
@@ -220,17 +220,17 @@ def train_(cfg, model, tokenizer, train_df, valid_df, device, writer=None, _pref
             writer,
             _prefix=_prefix,
         )
-        writer.add_scalar(f"{_prefix}_valid_epoch/f1", f1_val, epoch)
-        writer.add_scalar(
-            f"{_prefix}_valid_epoch/acc", (labels_val == preds_val).mean(), epoch
+        writer.add_scalars(f"valid_epoch/f1", {_prefix: f1_val}, epoch)
+        writer.add_scalars(
+            f"valid_epoch/acc", {_prefix: (labels_val == preds_val).mean()}, epoch
         )
-        writer.add_scalar(f"{_prefix}_valid_epoch/loss", loss_val, epoch)
+        writer.add_scalars(f"valid_epoch/loss", {_prefix: loss_val}, epoch)
 
-        writer.add_scalar(f"{_prefix}_train_epoch/f1", f1_train, epoch)
-        writer.add_scalar(
-            f"{_prefix}_train_epoch/acc", (labels_train == preds_train).mean(), epoch
+        writer.add_scalars(f"train_epoch/f1", {_prefix: f1_train}, epoch)
+        writer.add_scalars(
+            f"train_epoch/acc", {_prefix: (labels_train == preds_train).mean()}, epoch
         )
-        writer.add_scalar(f"{_prefix}_train_epoch/loss", loss_train, epoch)
+        writer.add_scalars(f"train_epoch/loss", {_prefix: loss_train}, epoch)
 
         logger.info(
             f"valid epoch {epoch + 1} / {cfg.epochs} done in {time.time() - start_time:.2f} seconds f1 train {f1_train:.4f} f1 val {f1_val:.4f}"
@@ -338,5 +338,12 @@ def train(cfg_path: str, model_path: str = None):
         )
     else:
         train_(
-            cfg, model, tokenizer, train_df, valid_df, cfg.device, tb_writer, _prefix=""
+            cfg,
+            model,
+            tokenizer,
+            train_df,
+            valid_df,
+            cfg.device,
+            tb_writer,
+            _prefix="base",
         )
