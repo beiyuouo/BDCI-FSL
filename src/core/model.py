@@ -41,6 +41,20 @@ class BDCIModel(nn.Module):
 
         return logits
 
+    def get_embeddings(self, input_ids, attention_mask, token_type_ids=None):
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        )
+
+        last_hidden_state, pooler_output = (
+            outputs.last_hidden_state,
+            outputs.pooler_output,
+        )
+
+        return last_hidden_state, pooler_output
+
     def freeze_bert_encoder(self):
         for param in self.bert.parameters():
             param.requires_grad = False
