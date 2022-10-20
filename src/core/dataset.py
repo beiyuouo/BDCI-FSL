@@ -25,9 +25,7 @@ class FSDataset(Dataset):
         assignee = self.assignee[item]
         abstract = self.abstract[item]
 
-        # abstract = abstract.replace("。", self.sep_token)
-
-        input_text = f"标题: {title} {self.sep_token} 申请人: {assignee} {self.sep_token} 摘要: {abstract}"
+        input_text = f"标题为{title}的专利摘要内容为{abstract}" + self.sep_token
 
         return input_text
 

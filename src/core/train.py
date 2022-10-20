@@ -239,21 +239,24 @@ def train_(cfg, model, tokenizer, train_df, valid_df, device, writer=None, _pref
         if f1_val > best_f1:
             best_f1 = f1_val
             logger.info(f"best fl val score {best_f1:.4f} saving model")
-            tokenizer.save_pretrained(cfg.model_path / "best")
-            torch.save(model.state_dict(), cfg.model_path / "best" / "model.pth")
+            tokenizer.save_pretrained(cfg.model_path / f"{_prefix}_best")
+            torch.save(
+                model.state_dict(), cfg.model_path / f"{_prefix}_best" / "model.pth"
+            )
 
         if (epoch + 1) % cfg.chpt_freq == 0:
             logger.info(f"saving model at epoch {epoch + 1}")
-            tokenizer.save_pretrained(cfg.model_path / f"chpt_{epoch + 1}")
+            tokenizer.save_pretrained(cfg.model_path / f"{_prefix}_chpt_{epoch + 1}")
             torch.save(
-                model.state_dict(), cfg.model_path / f"chpt_{epoch + 1}" / "model.pth"
+                model.state_dict(),
+                cfg.model_path / f"{_prefix}_chpt_{epoch + 1}" / "model.pth",
             )
 
         last_f1 = f1_val
 
     logger.info(f"best f1 score {best_f1:.4f}")
-    tokenizer.save_pretrained(cfg.model_path / "final")
-    torch.save(model.state_dict(), cfg.model_path / "final" / "model.pth")
+    tokenizer.save_pretrained(cfg.model_path / f"{_prefix}_final")
+    torch.save(model.state_dict(), cfg.model_path / f"{_prefix}_final" / "model.pth")
 
     return best_f1, last_f1
 
@@ -347,3 +350,40 @@ def train(cfg_path: str, model_path: str = None):
             tb_writer,
             _prefix="base",
         )
+
+
+def train_full(cfg_path: str, model_path: str = None):
+    cfg = init(cfg_path)
+    logger.info(cfg)
+
+    data_df = load_data(cfg.data_path, split="train")
+    logger.info(data_df.head())
+
+    model_path = (
+        Path(model_path) if model_path is not None else cfg.model_path / "pretrained"
+    )
+
+    if cfg.from_scratch:
+        logger.info("training from scratch")
+        model = get_model(cfg.model_name, cfg.num_labels)
+    else:
+        logger.info(f"loading model from {model_path}")
+        model = load_model(model_path, cfg.num_labels)
+
+    tokenizer = get_tokenizer(cfg.model_name)
+
+    if cfg.use_tensorboard:
+        tb_writer = SummaryWriter(cfg.log_path)
+    else:
+        tb_writer = None
+
+    train_(
+        cfg,
+        model,
+        tokenizer,
+        data_df,
+        data_df,
+        cfg.device,
+        tb_writer,
+        _prefix="full",
+    )
