@@ -12,7 +12,7 @@ from transformers import (
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-
+from pathlib import Path
 
 class BDCIModel(nn.Module):
     def __init__(self, model_name, num_labels):
@@ -129,8 +129,8 @@ def load_model(model_path, model_name="hfl/chinese-bert-wwm-ext", num_labels: in
     # model = AutoModelForSequenceClassification.from_pretrained(
     #     model_path, num_labels=num_labels
     # )
-    model = BDCIModel(model_path, num_labels)
-    model.load_state_dict(torch.load(model_path / "model.pth"), strict=False)
+    model = BDCIModel(model_name, num_labels)
+    model.load_state_dict(torch.load(Path(model_path) / "model.pth"), strict=False)
     return model
 
 
