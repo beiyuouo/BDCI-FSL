@@ -8,6 +8,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from sklearn.cluster import KMeans
 
 from core.dataset import FSDataset
 from core.model import get_model, load_model, get_tokenizer
@@ -97,6 +98,19 @@ def cluster(cfg_path: str, model_path: str = None):
             logger.info(f"step: {i+1}/{len(test_dl)}")
 
     test_embs = np.array(test_embs)
+
+    np.save(Path(cfg.data_path) / "test_embeddings.npy", test_embs)
+
+    clusterer = KMeans(n_clusters=cfg.num_labels, random_state=cfg.seed)
+    clusterer.fit(test_embs)
+
+    # cluster centers cal
+
+    test_df["label"] = clusterer.labels_
+    test_df.to_csv(
+        Path(cfg.data_path) / f"test_submit_A_cluster_kmeans_{int(time.time())}.csv",
+        index=False,
+    )
 
     # similarity matrix calculation using cosine similarity
     sim_matrix = np.array(

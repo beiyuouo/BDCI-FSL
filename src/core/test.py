@@ -21,7 +21,7 @@ def testA(cfg_path: str, model_path: str):
             cfg.model_path / "best" if cfg.use_best else cfg.model_path / "final"
         )
 
-    model = load_model(model_path)
+    model = load_model(model_path, model_name=cfg.model_name)
     logger.info(model)
 
     tokenizer = load_tokenizer(model_path)
@@ -64,7 +64,7 @@ def testA(cfg_path: str, model_path: str):
     test_df_export.to_csv(
         os.path.join(
             cfg.export_path,
-            f"test_submit_A_ep{cfg.epochs}_bs{cfg.batch_size}_{int(time.time())}.csv",
+            f"test_submitA_{cfg.model_name}_ep{cfg.epochs}_bs{cfg.batch_size}_{int(time.time())}.csv",
         ),
         index=False,
     )
@@ -126,7 +126,7 @@ def testA_with_weights(cfg_path: str, model_path: str):
     test_df_export.to_csv(
         os.path.join(
             cfg.export_path,
-            f"test_submit_A_ep{cfg.epochs}_bs{cfg.batch_size}_with_weights_{int(time.time())}.csv",
+            f"test_submitA_{cfg.model_name}_ep{cfg.epochs}_bs{cfg.batch_size}_with_weights_{int(time.time())}.csv",
         ),
         index=False,
     )

@@ -113,11 +113,11 @@ def valid_epoch(model, data_loader, criterion, device, cfg, writer=None, _prefix
                 input_ids=input_ids,
                 attention_mask=mask,
             )
-
         loss = criterion(outputs, label)
 
         total_loss += loss.item()
 
+        outputs = torch.softmax(outputs, dim=1)
         preds.extend(outputs.argmax(dim=1).to("cpu").numpy())
         labels.extend(label.to("cpu").numpy())
 
@@ -286,7 +286,7 @@ def train(cfg_path: str, model_path: str = None):
         # data_df[data_df["label"] == i]["fold"] = np
 
     else:
-        train_df = data_df.sample(frac=0.8, random_state=cfg.seed)
+        train_df = data_df.sample(frac=cfg.train_frac, random_state=cfg.seed)
         valid_df = data_df.drop(train_df.index).reset_index(drop=True)
 
     model_path = (
@@ -294,10 +294,10 @@ def train(cfg_path: str, model_path: str = None):
     )
 
     if cfg.from_scratch:
-        logger.info("training from scratch")
+        logger.info(f"training from scratch, model name: {cfg.model_name}")
         model = get_model(cfg.model_name, cfg.num_labels)
     else:
-        logger.info(f"loading model from {model_path}")
+        logger.info(f"loading model from {model_path}, model name: {cfg.model_name}")
         model = load_model(model_path, cfg.num_labels)
 
     tokenizer = get_tokenizer(cfg.model_name)

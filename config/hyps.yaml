@@ -12,8 +12,8 @@ max_grad_norm: 500
 scheduler: "cosine"
 batch_scheduler: True
 
-epochs: 20
-batch_size: 1
+epochs: 30
+batch_size: 4
 
 loss: "focal"
 focal:
@@ -35,7 +35,7 @@ prob_replace_rand: 0.1
 prob_keep_ori: 0.1
 
 # model config
-model_name: "hfl/chinese-bert-wwm-ext"
+model_name: "hfl/chinese-xlnet-base"
 num_labels: 36
 
 # data config
@@ -49,15 +49,18 @@ export_path: "./../export"
 
 # misc
 seed: 3407
-chpt_freq: 10
+chpt_freq: 5
 log_freq: 20
 use_best: True
 from_scratch: True
 with_augment: False
 use_tta: False
-use_kfold: True
+
+# data split
+use_kfold: False
 num_folds: 5
 use_tensorboard: True
+train_frac: 0.9
 
 # ssl
 ssl:

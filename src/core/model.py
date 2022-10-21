@@ -14,14 +14,18 @@ import torch.nn as nn
 from torch.optim import AdamW
 from pathlib import Path
 
+
 class BDCIModel(nn.Module):
     def __init__(self, model_name, num_labels):
         super().__init__()
 
         self.bert = BertModel.from_pretrained(model_name)
         self.dropout = nn.Dropout(0.1)
-        self.classifier = nn.Linear(768, num_labels)
-        self.sigmoid = nn.Sigmoid()
+
+        if "large" in model_name:
+            self.classifier = nn.Linear(1024, num_labels)
+        else:
+            self.classifier = nn.Linear(768, num_labels)
 
     def forward(self, input_ids, attention_mask, token_type_ids=None):
         outputs = self.bert(
@@ -37,7 +41,6 @@ class BDCIModel(nn.Module):
 
         pooled_output = self.dropout(pooler_output)
         logits = self.classifier(pooled_output)
-        logits = self.sigmoid(logits)
 
         return logits
 
