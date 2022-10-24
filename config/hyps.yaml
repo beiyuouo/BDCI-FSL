@@ -35,7 +35,7 @@ prob_replace_rand: 0.1
 prob_keep_ori: 0.1
 
 # model config
-model_name: "hfl/chinese-xlnet-base"
+model_name: "hfl/chinese-roberta-wwm-ext"
 num_labels: 36
 
 # data config
@@ -57,7 +57,7 @@ with_augment: False
 use_tta: False
 
 # data split
-use_kfold: False
+use_kfold: True
 num_folds: 5
 use_tensorboard: True
 train_frac: 0.9

@@ -22,11 +22,15 @@ class FocalLoss(nn.Module):
             return focal_loss
 
 
-def get_criterion(cfg):
-    if cfg.loss == "ce":
+def get_criterion(cfg, loss_type=None):
+    if loss_type is None:
+        loss_type = cfg.loss
+    if loss_type == "ce":
         criterion = nn.CrossEntropyLoss()
-    elif cfg.loss == "focal":
+    elif loss_type == "focal":
         criterion = FocalLoss(cfg.focal.alpha, cfg.focal.gamma)
+    elif loss_type == "bce":
+        criterion = nn.BCEWithLogitsLoss()
     else:
         raise NotImplementedError
 

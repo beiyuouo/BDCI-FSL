@@ -128,12 +128,18 @@ def get_scheduler(cfg, optimizer, num_train_steps):
     return scheduler
 
 
-def load_model(model_path, model_name="hfl/chinese-bert-wwm-ext", num_labels: int = 36):
+def load_model(
+    model_path,
+    model_name="hfl/chinese-bert-wwm-ext",
+    num_labels: int = 36,
+    model_pth=None,
+):
     # model = AutoModelForSequenceClassification.from_pretrained(
     #     model_path, num_labels=num_labels
     # )
     model = BDCIModel(model_name, num_labels)
-    model.load_state_dict(torch.load(Path(model_path) / "model.pth"), strict=False)
+    model_pth = model_pth if model_pth else "model.pth"
+    model.load_state_dict(torch.load(Path(model_path) / model_pth), strict=False)
     return model
 
 

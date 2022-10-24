@@ -1,6 +1,7 @@
 from core.train import train, train_full
 from core.test import testA, testA_with_weights
 from core.cluster import cluster
+from core.two_stage import train_two_stage, test_two_stage
 
 
 class Scaffold(object):
@@ -43,3 +44,13 @@ class Scaffold(object):
         # self.pretrain()
         self.train()
         self.test()
+
+    def train_ts(self, cfg_path: str = "./../config/hyps.yaml", model_path: str = None):
+        train_two_stage(cfg_path, model_path)
+
+    def test_ts(
+        self,
+        cfg_path: str = "./../config/hyps.yaml",
+        model_path: str = None,
+    ):
+        test_two_stage(cfg_path, model_path)
