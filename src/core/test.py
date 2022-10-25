@@ -32,7 +32,7 @@ def testA(cfg_path: str, model_path: str):
     test_dataset = FSDataset(test_df, tokenizer, is_test=True)
     test_dl = DataLoader(
         test_dataset,
-        batch_size=cfg.batch_size,
+        batch_size=cfg.infer_batch_size,
         shuffle=False,
         num_workers=0,
     )
@@ -64,7 +64,7 @@ def testA(cfg_path: str, model_path: str):
     test_df_export.to_csv(
         os.path.join(
             cfg.export_path,
-            f"test_submitA_{cfg.model_name}_ep{cfg.epochs}_bs{cfg.batch_size}_{int(time.time())}.csv",
+            f"test_submitA_{cfg.model_name.replace('/', '_')}_ep{cfg.epochs}_bs{cfg.batch_size}_{int(time.time())}.csv",
         ),
         index=False,
     )
@@ -90,7 +90,7 @@ def testA_with_weights(cfg_path: str, model_path: str):
     test_dataset = FSDataset(test_df, tokenizer, is_test=True)
     test_dl = DataLoader(
         test_dataset,
-        batch_size=cfg.batch_size,
+        batch_size=cfg.infer_batch_size,
         shuffle=False,
         num_workers=0,
     )

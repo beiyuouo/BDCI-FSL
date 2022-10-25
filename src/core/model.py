@@ -22,7 +22,7 @@ class BDCIModel(nn.Module):
         self.bert = BertModel.from_pretrained(model_name)
         self.dropout = nn.Dropout(0.1)
 
-        if "large" in model_name:
+        if "large" in model_name or "patent" in model_name:
             self.classifier = nn.Linear(1024, num_labels)
         else:
             self.classifier = nn.Linear(768, num_labels)

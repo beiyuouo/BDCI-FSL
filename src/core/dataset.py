@@ -4,9 +4,19 @@ from torch.utils.data import Dataset
 
 class FSDataset(Dataset):
     def __init__(self, df, tokenizer, is_test=False, mlm=False, cfg=None):
-        self.title = df["title"].values
-        self.assignee = df["assignee"].values
-        self.abstract = df["abstract"].values
+        self.title = (
+            df["title_en"].values if "title_en" in df.columns else df["title"].values
+        )
+        self.assignee = (
+            df["assignee_en"].values
+            if "assignee_en" in df.columns
+            else df["assignee"].values
+        )
+        self.abstract = (
+            df["abstract_en"].values
+            if "abstract_en" in df.columns
+            else df["abstract"].values
+        )
 
         if not is_test:
             self.label = df["label_id"].values
@@ -25,7 +35,13 @@ class FSDataset(Dataset):
         assignee = self.assignee[item]
         abstract = self.abstract[item]
 
-        input_text = f"标题为{title}的专利摘要内容为{abstract}" + self.sep_token
+        input_text = (
+            f"title:{title}"
+            + self.sep_token
+            + f"assignee:{assignee}"
+            + self.sep_token
+            + f"abstract:{abstract}"
+        )
 
         return input_text
 

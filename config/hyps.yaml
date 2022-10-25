@@ -12,8 +12,9 @@ max_grad_norm: 500
 scheduler: "cosine"
 batch_scheduler: True
 
-epochs: 30
-batch_size: 4
+epochs: 20
+batch_size: 8
+infer_batch_size: 32
 
 loss: "focal"
 focal:
@@ -35,7 +36,7 @@ prob_replace_rand: 0.1
 prob_keep_ori: 0.1
 
 # model config
-model_name: "hfl/chinese-roberta-wwm-ext"
+model_name: "anferico/bert-for-patents" # prithivida/bert-for-patents-64d
 num_labels: 36
 
 # data config
@@ -57,7 +58,7 @@ with_augment: False
 use_tta: False
 
 # data split
-use_kfold: True
+use_kfold: False
 num_folds: 5
 use_tensorboard: True
 train_frac: 0.9
